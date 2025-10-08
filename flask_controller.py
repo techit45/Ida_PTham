@@ -84,8 +84,15 @@ class ImageProcessor:
     def release_camera(self):
         self.is_running = False
         if self.camera:
-            self.camera.release()
-            print("Camera released")
+            try:
+                self.camera.release()
+                # Give time for camera to properly release
+                time.sleep(0.5)
+                print("Camera released")
+            except Exception as e:
+                print(f"Camera release error: {e}")
+            finally:
+                self.camera = None
 
 # === ARDUINO CONTROLLER ===
 class ArduinoController:
@@ -151,6 +158,20 @@ class ArduinoController:
             self.is_connected = False
             return False
 
+    def send_detection_data(self, yellow_detected, green_detected, yellow_count, green_count):
+        """Send color detection data to Arduino"""
+        if not self.is_connected or not self.serial_connection:
+            return False
+        
+        try:
+            command = f"COLOR:{int(yellow_detected)},{int(green_detected)},{yellow_count},{green_count}\n"
+            self.serial_connection.write(command.encode())
+            return True
+        except Exception as e:
+            print(f"Error sending data to Arduino: {e}")
+            self.is_connected = False
+            return False
+
     def send_motor_command(self, command):
         if not self.is_connected or not self.serial_connection:
             return False
@@ -198,8 +219,70 @@ arduino_controller = ArduinoController()
 def initialize_components():
     if image_processor.initialize_camera():
         system.camera_enabled = True
-        threading.Thread(target=continuous_detection, daemon=True).start()
+        # Start background detection thread
+        detection_thread = threading.Thread(target=continuous_detection, daemon=True)
+        detection_thread.start()
     arduino_controller.connect()
+
+def continuous_detection():
+    """Continuous color detection and Arduino communication"""
+    last_send_time = 0
+    
+    while image_processor.is_running:
+        try:
+            current_time = time.time()
+            
+            # Get frame and process
+            frame = image_processor.get_frame()
+            if frame is not None:
+                # Update system state with detection results
+                system.yellow_detected = image_processor.yellow_detected
+                system.green_detected = image_processor.green_detected
+                system.detection_results = image_processor.detection_results
+                
+                # Send data to Arduino every 1 second to avoid flooding
+                if current_time - last_send_time >= 1.0:
+                    success = arduino_controller.send_detection_data(
+                        system.yellow_detected,
+                        system.green_detected,
+                        system.detection_results["yellow_count"],
+                        system.detection_results["green_count"]
+                    )
+                    if success:
+                        last_send_time = current_time
+            
+            time.sleep(0.1)  # 100ms delay for responsive detection
+            
+        except Exception as e:
+            print(f"Error in continuous detection: {e}")
+            time.sleep(1)
+
+def generate_frames():
+    """Generate camera frames for streaming"""
+    while True:
+        try:
+            if not system.camera_enabled or not image_processor.is_running:
+                # Generate a placeholder frame
+                frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                cv2.putText(frame, 'Camera Not Available', (150, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            else:
+                frame = image_processor.get_frame()
+                if frame is None:
+                    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                    cv2.putText(frame, 'Camera Error', (200, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+            
+            # Encode frame to JPEG
+            ret, buffer = cv2.imencode('.jpg', frame)
+            if ret:
+                frame_bytes = buffer.tobytes()
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+            else:
+                time.sleep(0.1)
+                
+        except Exception as e:
+            print(f"Error in generate_frames: {e}")
+            time.sleep(0.5)
 
 def continuous_detection():
     last_send = 0
@@ -243,7 +326,9 @@ def index():
 
 @app.route('/video_feed')
 def video_feed():
-    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    """Video streaming route"""
+    return Response(generate_frames(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @app.route('/camera_control')
 def camera_control():
@@ -351,13 +436,25 @@ def reset():
     return "OK"
 
 # === MAIN ===
-if __name__ == '__main__':
-    initialize_components()
+def cleanup_resources():
+    """Clean up resources properly"""
     try:
-        app.run(debug=True, host='0.0.0.0', port=5001)
-    except KeyboardInterrupt:
-        print("\nShutting down...")
-    finally:
         if system.camera_enabled:
             image_processor.release_camera()
         arduino_controller.disconnect()
+        # Force cleanup of OpenCV resources
+        cv2.destroyAllWindows()
+        print("Resources cleaned up")
+    except Exception as e:
+        print(f"Cleanup error: {e}")
+
+if __name__ == '__main__':
+    initialize_components()
+    try:
+        app.run(debug=True, host='0.0.0.0', port=5001, threaded=True)
+    except KeyboardInterrupt:
+        print("\nShutting down...")
+    except Exception as e:
+        print(f"Application error: {e}")
+    finally:
+        cleanup_resources()

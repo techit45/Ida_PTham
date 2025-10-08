@@ -110,34 +110,41 @@ class Arduino:
         for p in ports:
             try:
                 print(f"Trying to connect to {p}...")
-                self.ser = serial.Serial(p, 115200, timeout=2)
-                time.sleep(2)
+                self.ser = serial.Serial(p, 115200, timeout=1)
+                print(f"Waiting for Arduino to boot...")
+                time.sleep(3)  # รอให้ Arduino boot
 
                 # ล้างข้อมูลเก่า
                 self.ser.reset_input_buffer()
                 self.ser.reset_output_buffer()
 
-                # ส่ง PING
-                self.ser.write(b"PING\n")
-                time.sleep(0.5)
+                # ลอง PING หลายครั้ง
+                for attempt in range(3):
+                    print(f"Sending PING (attempt {attempt + 1}/3)...")
+                    self.ser.write(b"PING\n")
+                    time.sleep(0.5)
 
-                # อ่าน response (รองรับ encoding error)
-                response = ""
-                try:
-                    response = self.ser.readline().decode('utf-8', errors='ignore').strip()
-                except:
+                    # อ่าน response
                     response = ""
+                    try:
+                        response = self.ser.readline().decode('utf-8', errors='ignore').strip()
+                    except:
+                        pass
 
-                print(f"Response from {p}: '{response}'")
+                    print(f"Response: '{response}'")
 
-                if "PONG" in response:
-                    self.connected = True
-                    self.port = p
-                    print(f"Arduino connected: {p}")
-                    return True
+                    if "PONG" in response:
+                        self.connected = True
+                        self.port = p
+                        print(f"✓ Arduino connected: {p}")
+                        return True
+
+                # ไม่ได้ PONG กลับมา
+                print(f"✗ No PONG response from {p}")
                 self.ser.close()
+
             except Exception as e:
-                print(f"Failed to connect to {p}: {e}")
+                print(f"✗ Failed to connect to {p}: {e}")
                 try:
                     if self.ser and self.ser.is_open:
                         self.ser.close()

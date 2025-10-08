@@ -110,12 +110,27 @@ class Arduino:
         for p in ports:
             try:
                 print(f"Trying to connect to {p}...")
-                self.ser = serial.Serial(p, 115200, timeout=1)
+                self.ser = serial.Serial(p, 115200, timeout=2)
                 time.sleep(2)
+
+                # ล้างข้อมูลเก่า
+                self.ser.reset_input_buffer()
+                self.ser.reset_output_buffer()
+
+                # ส่ง PING
                 self.ser.write(b"PING\n")
-                response = self.ser.readline().decode().strip()
-                print(f"Response from {p}: {response}")
-                if response == "PONG":
+                time.sleep(0.5)
+
+                # อ่าน response (รองรับ encoding error)
+                response = ""
+                try:
+                    response = self.ser.readline().decode('utf-8', errors='ignore').strip()
+                except:
+                    response = ""
+
+                print(f"Response from {p}: '{response}'")
+
+                if "PONG" in response:
                     self.connected = True
                     self.port = p
                     print(f"Arduino connected: {p}")
@@ -123,7 +138,11 @@ class Arduino:
                 self.ser.close()
             except Exception as e:
                 print(f"Failed to connect to {p}: {e}")
-                pass
+                try:
+                    if self.ser and self.ser.is_open:
+                        self.ser.close()
+                except:
+                    pass
 
         print("Arduino: Not found")
         return False

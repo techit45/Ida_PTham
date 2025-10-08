@@ -5,7 +5,7 @@ import numpy as np
 import serial
 import threading
 import time
-import sys
+import serial.tools.list_ports
 
 app = Flask(__name__)
 
@@ -94,28 +94,35 @@ class Arduino:
         self.port = None
 
     def get_ports(self):
-        # ดึงรายชื่อ COM ports (Windows เท่านั้น)
+        # ดึงรายชื่อ COM ports ที่มีอยู่จริง (Windows)
         ports = []
-        for i in range(1, 20):
-            ports.append(f'COM{i}')
+        for port in serial.tools.list_ports.comports():
+            ports.append(port.device)
         return ports
 
     def connect(self, port=None):
         # เชื่อมต่อกับ port ที่ระบุ หรือหาอัตโนมัติ
-        ports = [port] if port else self.get_ports()
+        if port:
+            ports = [port]
+        else:
+            ports = self.get_ports()
 
         for p in ports:
             try:
+                print(f"Trying to connect to {p}...")
                 self.ser = serial.Serial(p, 115200, timeout=1)
                 time.sleep(2)
                 self.ser.write(b"PING\n")
-                if self.ser.readline().decode().strip() == "PONG":
+                response = self.ser.readline().decode().strip()
+                print(f"Response from {p}: {response}")
+                if response == "PONG":
                     self.connected = True
                     self.port = p
-                    print(f"Arduino: {p}")
+                    print(f"Arduino connected: {p}")
                     return True
                 self.ser.close()
-            except:
+            except Exception as e:
+                print(f"Failed to connect to {p}: {e}")
                 pass
 
         print("Arduino: Not found")

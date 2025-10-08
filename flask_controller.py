@@ -49,10 +49,10 @@ class Camera:
         # แปลงเป็น HSV
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-        # หาสี 3 แบบ
-        yellow_mask = cv2.inRange(hsv, np.array([20, 50, 50]), np.array([30, 255, 255]))
-        green_mask = cv2.inRange(hsv, np.array([40, 50, 50]), np.array([80, 255, 255]))
-        purple_mask = cv2.inRange(hsv, np.array([125, 50, 50]), np.array([150, 255, 255]))
+        # หาสี 3 แบบ (เพิ่ม Saturation และ Value ขั้นต่ำ เพื่อไม่เจอสีเข้ม/ดำ)
+        yellow_mask = cv2.inRange(hsv, np.array([20, 80, 80]), np.array([30, 255, 255]))
+        green_mask = cv2.inRange(hsv, np.array([40, 60, 60]), np.array([80, 255, 255]))
+        purple_mask = cv2.inRange(hsv, np.array([125, 80, 80]), np.array([155, 255, 255]))
 
         yellow_contours, _ = cv2.findContours(yellow_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         green_contours, _ = cv2.findContours(green_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)

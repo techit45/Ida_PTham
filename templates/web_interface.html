@@ -715,15 +715,23 @@
                 greenStatus.className = "data-display status-not-detected";
               }
 
+              // Update purple detection
+              const purpleStatus = document.getElementById("purple_status");
+              const purpleCount = document.getElementById("purple_count");
+              if (data.purple_detected) {
+                purpleStatus.innerText = "พบ";
+                purpleStatus.className = "data-display status-detected";
+              } else {
+                purpleStatus.innerText = "ไม่พบ";
+                purpleStatus.className = "data-display status-not-detected";
+              }
+
               yellowCount.innerText = data.detection_results
                 ? data.detection_results.yellow_count
                 : 0;
               greenCount.innerText = data.detection_results
                 ? data.detection_results.green_count
                 : 0;
-
-              // Update purple count
-              const purpleCount = document.getElementById("purple_count");
               purpleCount.innerText = data.detection_results
                 ? data.detection_results.purple_count
                 : 0;

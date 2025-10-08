@@ -356,63 +356,70 @@ def data():
 
 @app.route('/motor')
 def motor():
-    if system.mode != "manual" or system.moving:
-        return "Busy", 403
-
+    # Manual control ผ่าน Arduino
     d = request.args.get('dir')
+
     if d == 'xfwd':
-        system.x += 100
+        arduino.send("MOTOR:X_FWD\n")
     elif d == 'xback':
-        system.x -= 100
+        arduino.send("MOTOR:X_BACK\n")
     elif d == 'yfwd':
-        system.y += 100
+        arduino.send("MOTOR:Y_FWD\n")
     elif d == 'yback':
-        system.y -= 100
+        arduino.send("MOTOR:Y_BACK\n")
     elif d == 'stop':
-        system.moving = False
+        arduino.send("MOTOR:STOP\n")
+
     return "OK"
 
 @app.route('/moveto')
 def moveto():
-    if system.moving:
-        return "Busy", 403
+    # ส่งคำสั่งไป Arduino ให้ไปตำแหน่ง
     p = int(request.args.get('pos', 0))
-    if p == 1:
-        system.x, system.y = 0, 0
-    elif p == 2:
-        system.x, system.y = 0, -4000
-    elif p == 3:
-        system.x, system.y = -4000, 0
-    elif p == 4:
-        system.x, system.y = -4000, -4000
+    if p >= 1 and p <= 4:
+        arduino.send(f"MOVETO:{p}\n")
     return "OK"
 
 @app.route('/setmode')
 def setmode():
+    # เปลี่ยนโหมด
     m = request.args.get('mode')
-    system.moving = False
     system.mode = "auto_sequence" if m == 'auto_sequence' else "manual"
     system.step = 0
+
+    # ส่งไป Arduino
+    if m == 'auto_sequence':
+        arduino.send("MODE:AUTO\n")
+    else:
+        arduino.send("MODE:MANUAL\n")
+
     return "OK"
 
 @app.route('/set-alarm')
 def setalarm():
+    # ตั้งเวลา
     s = int(request.args.get('slot', 0))
     t = request.args.get('alarmTime', '')
     if 0 <= s < 3:
         system.alarms[s] = {"isEnabled": True, "time": t}
+        # ส่งไป Arduino
+        arduino.send(f"ALARM:{s},{t}\n")
     return "OK"
 
 @app.route('/cancel-alarm')
 def cancelalarm():
+    # ยกเลิกเวลา
     s = int(request.args.get('slot', 0))
     if 0 <= s < 3:
         system.alarms[s] = {"isEnabled": False, "time": ""}
+        # ส่งไป Arduino
+        arduino.send(f"CANCEL:{s}\n")
     return "OK"
 
 @app.route('/reset')
 def reset():
-    system.x = system.y = 0
+    # รีเซ็ต encoder
+    arduino.send("RESET\n")
     return "OK"
 
 # === เริ่มโปรแกรม ===

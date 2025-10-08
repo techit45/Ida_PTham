@@ -174,6 +174,49 @@ void processSerialCommand(String cmd) {
     else if (motorCmd == "Y_BACK") { Backward_Y(); Serial.println("ACK:MOTOR_Y_BACKWARD"); }
     else Serial.println("ERROR:INVALID_MOTOR_COMMAND");
   }
+  else if (cmd.startsWith("MOVETO:")) {
+    int pos = cmd.substring(7).toInt();
+    setTargetPosition(pos);
+    Serial.println("ACK:MOVETO");
+  }
+  else if (cmd.startsWith("MODE:")) {
+    String mode = cmd.substring(5);
+    if (mode == "AUTO") {
+      currentMode = AUTO_SEQUENCE;
+      Serial.println("ACK:MODE_AUTO");
+    } else {
+      currentMode = MANUAL;
+      Serial.println("ACK:MODE_MANUAL");
+    }
+  }
+  else if (cmd.startsWith("ALARM:")) {
+    // รับเวลา เช่น ALARM:0,14:30
+    String data = cmd.substring(6);
+    int idx = data.indexOf(',');
+    if (idx != -1) {
+      int slot = data.substring(0, idx).toInt();
+      String timeStr = data.substring(idx + 1);
+      int colonPos = timeStr.indexOf(':');
+      if (colonPos != -1 && slot >= 0 && slot < NUM_ALARMS) {
+        alarms[slot].hour = timeStr.substring(0, colonPos).toInt();
+        alarms[slot].minute = timeStr.substring(colonPos + 1).toInt();
+        alarms[slot].isEnabled = true;
+        Serial.println("ACK:ALARM_SET");
+      }
+    }
+  }
+  else if (cmd.startsWith("CANCEL:")) {
+    int slot = cmd.substring(7).toInt();
+    if (slot >= 0 && slot < NUM_ALARMS) {
+      alarms[slot].isEnabled = false;
+      Serial.println("ACK:ALARM_CANCEL");
+    }
+  }
+  else if (cmd == "RESET") {
+    encoderValue_X = 0;
+    encoderValue_Y = 0;
+    Serial.println("ACK:RESET");
+  }
   else {
     Serial.println("ERROR:UNKNOWN_COMMAND");
   }

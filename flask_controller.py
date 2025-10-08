@@ -94,78 +94,78 @@ class Arduino:
         self.port = None
 
     def get_ports(self):
-        # ดึงรายชื่อ COM ports ที่มีอยู่จริง (Windows)
+        # หา COM port ทั้งหมด
         ports = []
-        for port in serial.tools.list_ports.comports():
+        all_ports = serial.tools.list_ports.comports()
+        for port in all_ports:
             ports.append(port.device)
         return ports
 
     def connect(self, port=None):
-        # เชื่อมต่อกับ port ที่ระบุ หรือหาอัตโนมัติ
+        # เชื่อมต่อ Arduino
         if port:
+            # ใช้ port ที่เลือก
             ports = [port]
         else:
+            # หาอัตโนมัติ
             ports = self.get_ports()
 
         for p in ports:
             try:
-                print(f"Trying to connect to {p}...")
+                print(f"กำลังเชื่อมต่อ {p}...")
+
+                # เปิด port
                 self.ser = serial.Serial(p, 115200, timeout=1)
-                print(f"Waiting for Arduino to boot...")
-                time.sleep(2)  # รอให้ Arduino boot
+                time.sleep(2)
 
-                # อ่านและทิ้งข้อมูลเก่า (จำกัดเวลา 1 วินาที)
-                print(f"Clearing old data...")
-                start_clear = time.time()
-                while self.ser.in_waiting > 0 and (time.time() - start_clear) < 1.0:
-                    try:
-                        self.ser.read(self.ser.in_waiting)
-                        time.sleep(0.1)
-                    except:
-                        break
-
-                # ล้าง buffer
+                # ลบข้อมูลเก่า
                 self.ser.reset_input_buffer()
                 self.ser.reset_output_buffer()
-                time.sleep(0.2)
+                time.sleep(0.5)
 
-                # ลอง PING หลายครั้ง
-                for attempt in range(5):
-                    print(f"Sending PING (attempt {attempt + 1}/5)...")
-                    self.ser.write(b"PING\n")
-                    self.ser.flush()
-                    time.sleep(0.3)
+                # ส่ง PING
+                self.ser.write(b"PING\n")
+                time.sleep(0.5)
 
-                    # อ่าน response หลายบรรทัด
-                    for line_attempt in range(3):
-                        if self.ser.in_waiting > 0:
-                            try:
-                                line = self.ser.readline()
-                                response = line.decode('utf-8', errors='ignore').strip()
-                                print(f"Response: '{response}'")
+                # อ่าน response
+                if self.ser.in_waiting > 0:
+                    data = self.ser.readline()
+                    response = data.decode('utf-8', errors='ignore').strip()
+                    print(f"ได้: {response}")
 
-                                if "PONG" in response:
-                                    self.connected = True
-                                    self.port = p
-                                    print(f"✓ Arduino connected: {p}")
-                                    return True
-                            except:
-                                pass
-                        time.sleep(0.1)
+                    if "PONG" in response:
+                        self.connected = True
+                        self.port = p
+                        print(f"เชื่อมต่อสำเร็จ: {p}")
+                        return True
 
-                # ไม่ได้ PONG กลับมา
-                print(f"✗ No PONG response from {p}")
+                # ลองอีกครั้ง
+                self.ser.write(b"PING\n")
+                time.sleep(0.5)
+
+                if self.ser.in_waiting > 0:
+                    data = self.ser.readline()
+                    response = data.decode('utf-8', errors='ignore').strip()
+                    print(f"ได้: {response}")
+
+                    if "PONG" in response:
+                        self.connected = True
+                        self.port = p
+                        print(f"เชื่อมต่อสำเร็จ: {p}")
+                        return True
+
+                print(f"ไม่ได้รับ PONG จาก {p}")
                 self.ser.close()
 
             except Exception as e:
-                print(f"✗ Failed to connect to {p}: {e}")
-                try:
-                    if self.ser and self.ser.is_open:
+                print(f"ผิดพลาด: {e}")
+                if self.ser:
+                    try:
                         self.ser.close()
-                except:
-                    pass
+                    except:
+                        pass
 
-        print("Arduino: Not found")
+        print("หา Arduino ไม่เจอ")
         return False
 
     def send(self, cmd):

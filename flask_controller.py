@@ -112,32 +112,45 @@ class Arduino:
                 print(f"Trying to connect to {p}...")
                 self.ser = serial.Serial(p, 115200, timeout=1)
                 print(f"Waiting for Arduino to boot...")
-                time.sleep(3)  # รอให้ Arduino boot
+                time.sleep(2)  # รอให้ Arduino boot
 
-                # ล้างข้อมูลเก่า
-                self.ser.reset_input_buffer()
-                self.ser.reset_output_buffer()
-
-                # ลอง PING หลายครั้ง
-                for attempt in range(3):
-                    print(f"Sending PING (attempt {attempt + 1}/3)...")
-                    self.ser.write(b"PING\n")
-                    time.sleep(0.5)
-
-                    # อ่าน response
-                    response = ""
+                # อ่านและทิ้งข้อมูลเก่าทั้งหมด
+                print(f"Clearing old data...")
+                while self.ser.in_waiting > 0:
                     try:
-                        response = self.ser.readline().decode('utf-8', errors='ignore').strip()
+                        self.ser.read(self.ser.in_waiting)
                     except:
                         pass
+                    time.sleep(0.1)
 
-                    print(f"Response: '{response}'")
+                # ล้าง buffer
+                self.ser.reset_input_buffer()
+                self.ser.reset_output_buffer()
+                time.sleep(0.5)
 
-                    if "PONG" in response:
-                        self.connected = True
-                        self.port = p
-                        print(f"✓ Arduino connected: {p}")
-                        return True
+                # ลอง PING หลายครั้ง
+                for attempt in range(5):
+                    print(f"Sending PING (attempt {attempt + 1}/5)...")
+                    self.ser.write(b"PING\n")
+                    self.ser.flush()
+                    time.sleep(0.3)
+
+                    # อ่าน response หลายบรรทัด
+                    for line_attempt in range(3):
+                        if self.ser.in_waiting > 0:
+                            try:
+                                line = self.ser.readline()
+                                response = line.decode('utf-8', errors='ignore').strip()
+                                print(f"Response: '{response}'")
+
+                                if "PONG" in response:
+                                    self.connected = True
+                                    self.port = p
+                                    print(f"✓ Arduino connected: {p}")
+                                    return True
+                            except:
+                                pass
+                        time.sleep(0.1)
 
                 # ไม่ได้ PONG กลับมา
                 print(f"✗ No PONG response from {p}")

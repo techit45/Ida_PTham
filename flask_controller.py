@@ -114,19 +114,20 @@ class Arduino:
                 print(f"Waiting for Arduino to boot...")
                 time.sleep(2)  # รอให้ Arduino boot
 
-                # อ่านและทิ้งข้อมูลเก่าทั้งหมด
+                # อ่านและทิ้งข้อมูลเก่า (จำกัดเวลา 1 วินาที)
                 print(f"Clearing old data...")
-                while self.ser.in_waiting > 0:
+                start_clear = time.time()
+                while self.ser.in_waiting > 0 and (time.time() - start_clear) < 1.0:
                     try:
                         self.ser.read(self.ser.in_waiting)
+                        time.sleep(0.1)
                     except:
-                        pass
-                    time.sleep(0.1)
+                        break
 
                 # ล้าง buffer
                 self.ser.reset_input_buffer()
                 self.ser.reset_output_buffer()
-                time.sleep(0.5)
+                time.sleep(0.2)
 
                 # ลอง PING หลายครั้ง
                 for attempt in range(5):

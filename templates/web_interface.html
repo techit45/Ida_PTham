@@ -240,29 +240,35 @@
               <span id="arduino_port" class="data-display">-</span>
             </p>
           </div>
+          <div style="margin-bottom: 10px;">
+            <label><strong>เลือก COM Port:</strong></label>
+            <select id="port_select" style="padding: 8px; margin: 5px; border-radius: 5px; font-size: 14px; width: 100%;">
+              <option value="">ค้นหาอัตโนมัติ</option>
+            </select>
+          </div>
           <div
             style="display: flex; justify-content: space-around; margin: 10px 0"
           >
             <button
               class="button"
+              style="background-color: #28a745"
+              onclick="connectArduino()"
+            >
+              Connect
+            </button>
+            <button
+              class="button"
+              style="background-color: #dc3545"
+              onclick="disconnectArduino()"
+            >
+              Disconnect
+            </button>
+            <button
+              class="button"
               style="background-color: #17a2b8"
-              onclick="controlArduino('reconnect')"
+              onclick="loadPorts()"
             >
-              เชื่อมต่อ Arduino
-            </button>
-            <button
-              class="button"
-              style="background-color: #6c757d"
-              onclick="controlArduino('ping')"
-            >
-              Ping Test
-            </button>
-            <button
-              class="button"
-              style="background-color: #fd7e14"
-              onclick="controlArduino('status')"
-            >
-              ดูสถานะ
+              Refresh Ports
             </button>
           </div>
           <hr />
@@ -512,6 +518,46 @@
           .catch((error) => console.error("Arduino control error:", error));
       }
 
+      function loadPorts() {
+        fetch('/arduino_control?action=get_ports')
+          .then((response) => response.json())
+          .then((data) => {
+            const select = document.getElementById('port_select');
+            select.innerHTML = '<option value="">ค้นหาอัตโนมัติ</option>';
+            if (data.ports && data.ports.length > 0) {
+              data.ports.forEach((port) => {
+                const option = document.createElement('option');
+                option.value = port;
+                option.innerText = port;
+                select.appendChild(option);
+              });
+            }
+          })
+          .catch((error) => console.error("Load ports error:", error));
+      }
+
+      function connectArduino() {
+        const port = document.getElementById('port_select').value;
+        const url = port ? `/arduino_control?action=connect&port=${port}` : '/arduino_control?action=connect';
+        fetch(url)
+          .then((response) => response.json())
+          .then((data) => {
+            console.log("Connect result:", data);
+            updateArduinoStatus();
+          })
+          .catch((error) => console.error("Connect error:", error));
+      }
+
+      function disconnectArduino() {
+        fetch('/arduino_control?action=disconnect')
+          .then((response) => response.json())
+          .then((data) => {
+            console.log("Disconnect result:", data);
+            updateArduinoStatus();
+          })
+          .catch((error) => console.error("Disconnect error:", error));
+      }
+
       function updateArduinoStatus() {
         fetch("/detection_data")
           .then((response) => response.json())
@@ -706,7 +752,10 @@
       }
 
       setInterval(updateData, 500);
-      window.onload = updateData;
+      window.onload = function() {
+        updateData();
+        loadPorts();
+      };
     </script>
   </body>
 </html>

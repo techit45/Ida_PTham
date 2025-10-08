@@ -21,10 +21,8 @@ class Camera:
 
     def start(self):
         try:
-            if sys.platform == 'win32':
-                self.cam = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-            else:
-                self.cam = cv2.VideoCapture(0)
+            # Windows เท่านั้น
+            self.cam = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 
             if self.cam.isOpened():
                 self.cam.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -95,26 +93,26 @@ class Arduino:
         self.connected = False
         self.port = None
 
-    def connect(self):
-        # หา port
+    def get_ports(self):
+        # ดึงรายชื่อ COM ports (Windows เท่านั้น)
         ports = []
-        if sys.platform == 'win32':
-            for i in range(1, 20):
-                ports.append(f'COM{i}')
-        else:
-            import glob
-            ports = glob.glob('/dev/ttyUSB*') + glob.glob('/dev/ttyACM*') + glob.glob('/dev/cu.usb*')
+        for i in range(1, 20):
+            ports.append(f'COM{i}')
+        return ports
 
-        # ลองเชื่อมต่อ
-        for port in ports:
+    def connect(self, port=None):
+        # เชื่อมต่อกับ port ที่ระบุ หรือหาอัตโนมัติ
+        ports = [port] if port else self.get_ports()
+
+        for p in ports:
             try:
-                self.ser = serial.Serial(port, 115200, timeout=1)
+                self.ser = serial.Serial(p, 115200, timeout=1)
                 time.sleep(2)
                 self.ser.write(b"PING\n")
                 if self.ser.readline().decode().strip() == "PONG":
                     self.connected = True
-                    self.port = port
-                    print(f"Arduino: {port}")
+                    self.port = p
+                    print(f"Arduino: {p}")
                     return True
                 self.ser.close()
             except:
@@ -213,7 +211,20 @@ def cam_ctrl():
 @app.route('/arduino_control')
 def ard_ctrl():
     action = request.args.get('action')
-    if action == 'reconnect':
+    port = request.args.get('port')
+
+    if action == 'get_ports':
+        ports = arduino.get_ports()
+        return jsonify({"status": "success", "ports": ports})
+    elif action == 'connect':
+        arduino.close()
+        ok = arduino.connect(port)
+        return jsonify({"status": "success" if ok else "error",
+                       "connected": ok, "port": arduino.port})
+    elif action == 'disconnect':
+        arduino.close()
+        return jsonify({"status": "success", "connected": False, "port": None})
+    elif action == 'reconnect':
         arduino.close()
         ok = arduino.connect()
         return jsonify({"status": "success" if ok else "error",

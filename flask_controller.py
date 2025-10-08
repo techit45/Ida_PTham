@@ -92,6 +92,9 @@ class Arduino:
         self.ser = None
         self.connected = False
         self.port = None
+        self.encoder_x = 0
+        self.encoder_y = 0
+        self.reading = False
 
     def get_ports(self):
         # หา COM port ทั้งหมด
@@ -137,6 +140,9 @@ class Arduino:
                         self.connected = True
                         self.port = p
                         print(f"เชื่อมต่อสำเร็จ: {p}")
+                        # เริ่ม thread อ่านข้อมูล
+                        self.reading = True
+                        threading.Thread(target=self.read_loop, daemon=True).start()
                         return True
 
                 # ลองอีกครั้ง
@@ -152,6 +158,9 @@ class Arduino:
                         self.connected = True
                         self.port = p
                         print(f"เชื่อมต่อสำเร็จ: {p}")
+                        # เริ่ม thread อ่านข้อมูล
+                        self.reading = True
+                        threading.Thread(target=self.read_loop, daemon=True).start()
                         return True
 
                 print(f"ไม่ได้รับ PONG จาก {p}")
@@ -168,6 +177,27 @@ class Arduino:
         print("หา Arduino ไม่เจอ")
         return False
 
+    def read_loop(self):
+        # อ่านข้อมูลจาก Arduino ตลอดเวลา
+        while self.reading and self.connected:
+            try:
+                if self.ser and self.ser.in_waiting > 0:
+                    line = self.ser.readline()
+                    data = line.decode('utf-8', errors='ignore').strip()
+
+                    # แยกข้อมูล STATUS
+                    if data.startswith("STATUS:"):
+                        parts = data.replace("STATUS:", "").split(",")
+                        for part in parts:
+                            if "X=" in part:
+                                self.encoder_x = int(part.split("=")[1])
+                            elif "Y=" in part:
+                                self.encoder_y = int(part.split("=")[1])
+
+                time.sleep(0.1)
+            except:
+                pass
+
     def send(self, cmd):
         if self.connected and self.ser:
             try:
@@ -178,9 +208,10 @@ class Arduino:
         return False
 
     def close(self):
+        self.reading = False
+        self.connected = False
         if self.ser:
             self.ser.close()
-        self.connected = False
 
 # === ระบบ ===
 camera = Camera()
@@ -266,6 +297,13 @@ def ard_ctrl():
     elif action == 'connect':
         arduino.close()
         ok = arduino.connect(port)
+        if ok:
+            # ขอ STATUS ทุก 1 วินาที
+            def request_status():
+                while arduino.connected:
+                    arduino.send("STATUS\n")
+                    time.sleep(1)
+            threading.Thread(target=request_status, daemon=True).start()
         return jsonify({"status": "success" if ok else "error",
                        "connected": ok, "port": arduino.port})
     elif action == 'disconnect':
@@ -274,6 +312,13 @@ def ard_ctrl():
     elif action == 'reconnect':
         arduino.close()
         ok = arduino.connect()
+        if ok:
+            # ขอ STATUS ทุก 1 วินาที
+            def request_status():
+                while arduino.connected:
+                    arduino.send("STATUS\n")
+                    time.sleep(1)
+            threading.Thread(target=request_status, daemon=True).start()
         return jsonify({"status": "success" if ok else "error",
                        "connected": ok, "port": arduino.port})
     elif action in ['X_FWD', 'X_BACK', 'Y_FWD', 'Y_BACK', 'STOP']:
@@ -296,8 +341,8 @@ def detect_data():
 @app.route('/data')
 def data():
     return jsonify({
-        "encoderX": system.x,
-        "encoderY": system.y,
+        "encoderX": arduino.encoder_x,
+        "encoderY": arduino.encoder_y,
         "isMoving": system.moving,
         "mode": system.mode,
         "timedSequenceStep": system.step,

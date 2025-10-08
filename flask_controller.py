@@ -16,8 +16,11 @@ class Camera:
         self.running = False
         self.yellow = False
         self.green = False
+        self.purple = False
         self.yellow_count = 0
         self.green_count = 0
+        self.purple_count = 0
+        self.plant_status = "ไม่พบพืช"
 
     def start(self):
         try:
@@ -46,15 +49,18 @@ class Camera:
         # แปลงเป็น HSV
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-        # หาสี
+        # หาสี 3 แบบ
         yellow_mask = cv2.inRange(hsv, np.array([20, 50, 50]), np.array([30, 255, 255]))
         green_mask = cv2.inRange(hsv, np.array([40, 50, 50]), np.array([80, 255, 255]))
+        purple_mask = cv2.inRange(hsv, np.array([125, 50, 50]), np.array([150, 255, 255]))
 
         yellow_contours, _ = cv2.findContours(yellow_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         green_contours, _ = cv2.findContours(green_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        purple_contours, _ = cv2.findContours(purple_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         self.yellow_count = 0
         self.green_count = 0
+        self.purple_count = 0
 
         # วาดกรอบสีเหลือง
         for c in yellow_contours:
@@ -72,10 +78,36 @@ class Camera:
                 cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
                 cv2.putText(frame, 'GREEN', (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
+        # วาดกรอบสีม่วง
+        for c in purple_contours:
+            if cv2.contourArea(c) > 500:
+                self.purple_count += 1
+                x, y, w, h = cv2.boundingRect(c)
+                cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 255), 2)
+                cv2.putText(frame, 'PURPLE', (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
+
         self.yellow = self.yellow_count > 0
         self.green = self.green_count > 0
+        self.purple = self.purple_count > 0
 
-        cv2.putText(frame, f"Y:{self.yellow_count} G:{self.green_count}", (10, 30),
+        # ตรวจสอบสภาพพืช
+        if self.yellow and not self.green and not self.purple:
+            self.plant_status = "ขาดไนโตรเจน"
+        elif self.purple and not self.green and not self.yellow:
+            self.plant_status = "ขาดฟอสฟอรัส"
+        elif self.yellow and self.purple:
+            self.plant_status = "ขาดไนโตรเจนและฟอสฟอรัส"
+        elif self.green and not self.yellow and not self.purple:
+            self.plant_status = "พืชปกติ"
+        elif self.green and (self.yellow or self.purple):
+            self.plant_status = "พืชปกติบางส่วน มีอาการขาดธาตุบางส่วน"
+        else:
+            self.plant_status = "ไม่พบพืช"
+
+        # แสดงสถานะ
+        cv2.putText(frame, f"Y:{self.yellow_count} G:{self.green_count} P:{self.purple_count}", (10, 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        cv2.putText(frame, self.plant_status, (10, 60),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
         return frame
@@ -235,8 +267,8 @@ def send_color_loop():
     while camera.running:
         try:
             if time.time() - last >= 1.0:
-                if camera.yellow or camera.green:
-                    cmd = f"COLOR:{int(camera.yellow)},{int(camera.green)},{camera.yellow_count},{camera.green_count}\n"
+                if camera.yellow or camera.green or camera.purple:
+                    cmd = f"COLOR:{int(camera.yellow)},{int(camera.green)},{int(camera.purple)},{camera.yellow_count},{camera.green_count},{camera.purple_count}\n"
                     arduino.send(cmd)
                 last = time.time()
             time.sleep(0.1)
@@ -331,8 +363,11 @@ def detect_data():
     return jsonify({
         "yellow_detected": camera.yellow,
         "green_detected": camera.green,
+        "purple_detected": camera.purple,
         "yellow_count": camera.yellow_count,
         "green_count": camera.green_count,
+        "purple_count": camera.purple_count,
+        "plant_status": camera.plant_status,
         "camera_enabled": system.cam_on,
         "arduino_connected": arduino.connected,
         "arduino_port": arduino.port
@@ -351,7 +386,13 @@ def data():
         "camera_enabled": system.cam_on,
         "yellow_detected": camera.yellow,
         "green_detected": camera.green,
-        "detection_results": {"yellow_count": camera.yellow_count, "green_count": camera.green_count}
+        "purple_detected": camera.purple,
+        "plant_status": camera.plant_status,
+        "detection_results": {
+            "yellow_count": camera.yellow_count,
+            "green_count": camera.green_count,
+            "purple_count": camera.purple_count
+        }
     })
 
 @app.route('/motor')

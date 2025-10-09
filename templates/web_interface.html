@@ -205,9 +205,18 @@
                 >ไม่พร้อมใช้งาน</span
               >
             </p>
-            <p style="background: #fff3cd; padding: 10px; border-radius: 5px; margin: 10px 0;">
+            <p
+              style="
+                background: #fff3cd;
+                padding: 10px;
+                border-radius: 5px;
+                margin: 10px 0;
+              "
+            >
               <strong>🌱 สภาพพืช:</strong>
-              <span id="plant_status" class="data-display" style="color: #333;">ไม่พบพืช</span>
+              <span id="plant_status" class="data-display" style="color: #333"
+                >ไม่พบพืช</span
+              >
             </p>
             <p>
               <strong>สีเหลือง:</strong>
@@ -263,9 +272,18 @@
               <span id="arduino_port" class="data-display">-</span>
             </p>
           </div>
-          <div style="margin-bottom: 10px;">
+          <div style="margin-bottom: 10px">
             <label><strong>เลือก COM Port:</strong></label>
-            <select id="port_select" style="padding: 8px; margin: 5px; border-radius: 5px; font-size: 14px; width: 100%;">
+            <select
+              id="port_select"
+              style="
+                padding: 8px;
+                margin: 5px;
+                border-radius: 5px;
+                font-size: 14px;
+                width: 100%;
+              "
+            >
               <option value="">ค้นหาอัตโนมัติ</option>
             </select>
           </div>
@@ -405,11 +423,30 @@
             <hr />
             <h3>ปั๊มน้ำ (Manual)</h3>
             <p>ตั้งเวลาปั๊มน้ำ (วินาที):</p>
-            <input type="number" id="pump-duration" value="5" min="1" max="60" style="padding: 10px; font-size: 1em; margin: 5px;" />
-            <button class="button button-success" onclick="setPumpDuration()">ตั้งเวลา</button>
+            <input
+              type="number"
+              id="pump-duration"
+              value="5"
+              min="1"
+              max="60"
+              style="padding: 10px; font-size: 1em; margin: 5px"
+            />
+            <button class="button button-success" onclick="setPumpDuration()">
+              ตั้งเวลา
+            </button>
             <br /><br />
-            <button class="button button-success" onclick="sendCommand('/pump?action=on')">เปิดปั๊มน้ำ</button>
-            <button class="button button-danger" onclick="sendCommand('/pump?action=off')">ปิดปั๊มน้ำ</button>
+            <button
+              class="button button-success"
+              onclick="sendCommand('/pump?action=on')"
+            >
+              เปิดปั๊มน้ำ
+            </button>
+            <button
+              class="button button-danger"
+              onclick="sendCommand('/pump?action=off')"
+            >
+              ปิดปั๊มน้ำ
+            </button>
           </div>
 
           <div id="auto-panel" style="display: none">
@@ -424,8 +461,20 @@
             <hr />
             <h3>ตั้งเวลาปั๊มน้ำ (Auto)</h3>
             <p>ระยะเวลาเปิดปั๊มในแต่ละตำแหน่ง (วินาที):</p>
-            <input type="number" id="pump-duration-auto" value="5" min="1" max="60" style="padding: 10px; font-size: 1em; margin: 5px;" />
-            <button class="button button-success" onclick="setPumpDurationAuto()">ตั้งเวลา</button>
+            <input
+              type="number"
+              id="pump-duration-auto"
+              value="5"
+              min="1"
+              max="60"
+              style="padding: 10px; font-size: 1em; margin: 5px"
+            />
+            <button
+              class="button button-success"
+              onclick="setPumpDurationAuto()"
+            >
+              ตั้งเวลา
+            </button>
             <hr />
             <h3>Timed Sequence Trigger</h3>
             <p>ตั้งเวลาเริ่มทำงาน (จะทำงานเมื่ออยู่ในโหมด Auto)</p>
@@ -520,34 +569,74 @@
 
         <div class="card">
           <h2>📊 บันทึกข้อมูล CSV</h2>
-          <p><strong>สถานะไฟล์:</strong> <span id="csv_filename" class="data-display">-</span></p>
-          <p><strong>จำนวนข้อมูล:</strong> <span id="csv_records" class="data-display">0</span> รายการ</p>
-          <p><strong>ขนาดไฟล์:</strong> <span id="csv_size" class="data-display">0</span> bytes</p>
-          
-          <div style="margin: 15px 0;">
+          <p>
+            <strong>สถานะไฟล์:</strong>
+            <span id="csv_filename" class="data-display">-</span>
+          </p>
+          <p>
+            <strong>จำนวนข้อมูล:</strong>
+            <span id="csv_records" class="data-display">0</span> รายการ
+          </p>
+          <p>
+            <strong>ขนาดไฟล์:</strong>
+            <span id="csv_size" class="data-display">0</span> bytes
+          </p>
+
+          <div style="margin: 15px 0">
             <h3>บันทึกข้อมูลแบบ Manual</h3>
-            <input type="text" id="manual_position" placeholder="ชื่อตำแหน่ง" style="padding: 10px; margin: 5px; width: 200px;" />
-            <input type="text" id="manual_notes" placeholder="หมายเหตุ" style="padding: 10px; margin: 5px; width: 200px;" />
-            <button class="button" style="background-color: #17a2b8;" onclick="logManualData()">
+            <input
+              type="text"
+              id="manual_position"
+              placeholder="ชื่อตำแหน่ง"
+              style="padding: 10px; margin: 5px; width: 200px"
+            />
+            <input
+              type="text"
+              id="manual_notes"
+              placeholder="หมายเหตุ"
+              style="padding: 10px; margin: 5px; width: 200px"
+            />
+            <button
+              class="button"
+              style="background-color: #17a2b8"
+              onclick="logManualData()"
+            >
               บันทึกข้อมูล
             </button>
           </div>
-          
-          <div style="display: flex; justify-content: space-around; margin: 15px 0;">
-            <button class="button" style="background-color: #28a745;" onclick="refreshCsvStatus()">
+
+          <div
+            style="display: flex; justify-content: space-around; margin: 15px 0"
+          >
+            <button
+              class="button"
+              style="background-color: #28a745"
+              onclick="refreshCsvStatus()"
+            >
               🔄 รีเฟรชสถานะ
             </button>
-            <button class="button" style="background-color: #007bff;" onclick="downloadCsv()">
+            <button
+              class="button"
+              style="background-color: #007bff"
+              onclick="downloadCsv()"
+            >
               📥 ดาวน์โหลด CSV
             </button>
           </div>
-          
-          <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+
+          <div
+            style="
+              margin-top: 15px;
+              padding: 10px;
+              background: #f8f9fa;
+              border-radius: 5px;
+            "
+          >
             <small>
-              <strong>📋 รูปแบบข้อมูล CSV:</strong><br>
-              • เวลา, ตำแหน่ง X/Y, ชื่อตำแหน่ง<br>
-              • จำนวนสีเขียว/เหลือง/ม่วง/น้ำตาล<br>
-              • สถานะพืช, การวินิจฉัย, หมายเหตุ<br>
+              <strong>📋 รูปแบบข้อมูล CSV:</strong><br />
+              • เวลา, ตำแหน่ง X/Y, ชื่อตำแหน่ง<br />
+              • จำนวนสีเขียว/เหลือง/ม่วง/น้ำตาล<br />
+              • สถานะพืช, การวินิจฉัย, หมายเหตุ<br />
               <em>ข้อมูลจะถูกบันทึกอัตโนมัติก่อนรดน้ำ</em>
             </small>
           </div>
@@ -602,14 +691,14 @@
       }
 
       function loadPorts() {
-        fetch('/arduino_control?action=get_ports')
+        fetch("/arduino_control?action=get_ports")
           .then((response) => response.json())
           .then((data) => {
-            const select = document.getElementById('port_select');
+            const select = document.getElementById("port_select");
             select.innerHTML = '<option value="">ค้นหาอัตโนมัติ</option>';
             if (data.ports && data.ports.length > 0) {
               data.ports.forEach((port) => {
-                const option = document.createElement('option');
+                const option = document.createElement("option");
                 option.value = port;
                 option.innerText = port;
                 select.appendChild(option);
@@ -620,8 +709,10 @@
       }
 
       function connectArduino() {
-        const port = document.getElementById('port_select').value;
-        const url = port ? `/arduino_control?action=connect&port=${port}` : '/arduino_control?action=connect';
+        const port = document.getElementById("port_select").value;
+        const url = port
+          ? `/arduino_control?action=connect&port=${port}`
+          : "/arduino_control?action=connect";
         fetch(url)
           .then((response) => response.json())
           .then((data) => {
@@ -632,7 +723,7 @@
       }
 
       function disconnectArduino() {
-        fetch('/arduino_control?action=disconnect')
+        fetch("/arduino_control?action=disconnect")
           .then((response) => response.json())
           .then((data) => {
             console.log("Disconnect result:", data);
@@ -815,7 +906,7 @@
               purpleCount.innerText = data.detection_results
                 ? data.detection_results.purple_count
                 : 0;
-                
+
               // Update brown count
               const brownCount = document.getElementById("brown_count");
               brownCount.innerText = data.detection_results
@@ -906,14 +997,17 @@
 
       // === CSV Functions ===
       function logManualData() {
-        const position = document.getElementById("manual_position").value || "Manual";
+        const position =
+          document.getElementById("manual_position").value || "Manual";
         const notes = document.getElementById("manual_notes").value || "";
-        
-        const url = `/log_data?position=${encodeURIComponent(position)}&notes=${encodeURIComponent(notes)}`;
-        
+
+        const url = `/log_data?position=${encodeURIComponent(
+          position
+        )}&notes=${encodeURIComponent(notes)}`;
+
         fetch(url)
-          .then(response => response.json())
-          .then(data => {
+          .then((response) => response.json())
+          .then((data) => {
             if (data.status === "success") {
               alert(`บันทึกข้อมูลสำเร็จ: ${position}`);
               document.getElementById("manual_position").value = "";
@@ -923,7 +1017,7 @@
               alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
             }
           })
-          .catch(error => {
+          .catch((error) => {
             console.error("Error:", error);
             alert("เกิดข้อผิดพลาดในการเชื่อมต่อ");
           });
@@ -931,13 +1025,15 @@
 
       function refreshCsvStatus() {
         fetch("/csv_status")
-          .then(response => response.json())
-          .then(data => {
-            document.getElementById("csv_filename").innerText = data.filename || "-";
-            document.getElementById("csv_records").innerText = data.record_count || 0;
+          .then((response) => response.json())
+          .then((data) => {
+            document.getElementById("csv_filename").innerText =
+              data.filename || "-";
+            document.getElementById("csv_records").innerText =
+              data.record_count || 0;
             document.getElementById("csv_size").innerText = data.file_size || 0;
           })
-          .catch(error => {
+          .catch((error) => {
             console.error("Error:", error);
           });
       }
@@ -947,7 +1043,7 @@
       }
 
       setInterval(updateData, 500);
-      window.onload = function() {
+      window.onload = function () {
         updateData();
         loadPorts();
         refreshCsvStatus(); // โหลดสถานะ CSV เมื่อเริ่มต้น

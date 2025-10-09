@@ -75,6 +75,12 @@
       .button-pos {
         background-color: #0097a7;
       }
+      .button-success {
+        background-color: #28a745;
+      }
+      .button-danger {
+        background-color: #dc3545;
+      }
       .button:hover {
         opacity: 0.8;
       }
@@ -137,6 +143,45 @@
   <body>
     <div class="container">
       <h1>ESP32 2-Axis Controller</h1>
+
+      <!-- แสดงข้อมูล CSV Summary ด้านบน -->
+      <div
+        style="
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          padding: 15px;
+          border-radius: 10px;
+          margin: 20px 0;
+          text-align: center;
+        "
+      >
+        <h3 style="color: white; margin: 0 0 10px 0">
+          📊 ข้อมูลที่บันทึกวันนี้
+        </h3>
+        <div
+          style="display: flex; justify-content: space-around; flex-wrap: wrap"
+        >
+          <div>
+            <span style="font-size: 1.1em; font-weight: bold">ไฟล์:</span>
+            <span id="header_csv_filename" style="font-weight: normal">-</span>
+          </div>
+          <div>
+            <span style="font-size: 1.1em; font-weight: bold"
+              >จำนวนข้อมูล:</span
+            >
+            <span id="header_csv_records" style="font-weight: normal"
+              >0 รายการ</span
+            >
+          </div>
+          <div>
+            <span style="font-size: 1.1em; font-weight: bold"
+              >ข้อมูลล่าสุด:</span
+            >
+            <span id="header_last_log" style="font-weight: normal">-</span>
+          </div>
+        </div>
+      </div>
+
       <p>
         <strong>Time:</strong> <span class="data-display" id="time">N/A</span>
       </p>
@@ -568,7 +613,26 @@
         </div>
 
         <div class="card">
-          <h2>📊 บันทึกข้อมูล CSV</h2>
+          <h2>📊 ข้อมูลที่บันทึก (Auto Mode)</h2>
+          <div
+            style="
+              background: #e3f2fd;
+              padding: 15px;
+              border-radius: 8px;
+              margin-bottom: 15px;
+            "
+          >
+            <h4 style="margin: 0 0 10px 0; color: #1976d2">
+              💡 การบันทึกข้อมูลอัตโนมัติ
+            </h4>
+            <p style="margin: 5px 0; font-size: 14px">
+              • ข้อมูลจะถูกบันทึกอัตโนมัติเฉพาะในโหมด
+              <strong>Auto Sequence</strong> เท่านั้น<br />
+              • บันทึกก่อนรดน้ำที่แต่ละตำแหน่ง (Position 1-4)<br />
+              • ใน 1 รอบจะได้ข้อมูล 4 ตำแหน่ง
+            </p>
+          </div>
+
           <p>
             <strong>สถานะไฟล์:</strong>
             <span id="csv_filename" class="data-display">-</span>
@@ -581,29 +645,6 @@
             <strong>ขนาดไฟล์:</strong>
             <span id="csv_size" class="data-display">0</span> bytes
           </p>
-
-          <div style="margin: 15px 0">
-            <h3>บันทึกข้อมูลแบบ Manual</h3>
-            <input
-              type="text"
-              id="manual_position"
-              placeholder="ชื่อตำแหน่ง"
-              style="padding: 10px; margin: 5px; width: 200px"
-            />
-            <input
-              type="text"
-              id="manual_notes"
-              placeholder="หมายเหตุ"
-              style="padding: 10px; margin: 5px; width: 200px"
-            />
-            <button
-              class="button"
-              style="background-color: #17a2b8"
-              onclick="logManualData()"
-            >
-              บันทึกข้อมูล
-            </button>
-          </div>
 
           <div
             style="display: flex; justify-content: space-around; margin: 15px 0"
@@ -634,10 +675,12 @@
           >
             <small>
               <strong>📋 รูปแบบข้อมูล CSV:</strong><br />
-              • เวลา, ตำแหน่ง X/Y, ชื่อตำแหน่ง<br />
+              • เวลาบันทึก, ตำแหน่ง X/Y, ชื่อตำแหน่ง<br />
               • จำนวนสีเขียว/เหลือง/ม่วง/น้ำตาล<br />
               • สถานะพืช, การวินิจฉัย, หมายเหตุ<br />
-              <em>ข้อมูลจะถูกบันทึกอัตโนมัติก่อนรดน้ำ</em>
+              <em style="color: #28a745"
+                >ข้อมูลบันทึกอัตโนมัติในโหมด Auto Sequence เท่านั้น</em
+              >
             </small>
           </div>
         </div>
@@ -996,42 +1039,38 @@
       }
 
       // === CSV Functions ===
-      function logManualData() {
-        const position =
-          document.getElementById("manual_position").value || "Manual";
-        const notes = document.getElementById("manual_notes").value || "";
-
-        const url = `/log_data?position=${encodeURIComponent(
-          position
-        )}&notes=${encodeURIComponent(notes)}`;
-
-        fetch(url)
-          .then((response) => response.json())
-          .then((data) => {
-            if (data.status === "success") {
-              alert(`บันทึกข้อมูลสำเร็จ: ${position}`);
-              document.getElementById("manual_position").value = "";
-              document.getElementById("manual_notes").value = "";
-              refreshCsvStatus();
-            } else {
-              alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
-            }
-          })
-          .catch((error) => {
-            console.error("Error:", error);
-            alert("เกิดข้อผิดพลาดในการเชื่อมต่อ");
-          });
-      }
-
       function refreshCsvStatus() {
         fetch("/csv_status")
           .then((response) => response.json())
           .then((data) => {
+            // อัพเดทในส่วน CSV Management
             document.getElementById("csv_filename").innerText =
               data.filename || "-";
             document.getElementById("csv_records").innerText =
               data.record_count || 0;
             document.getElementById("csv_size").innerText = data.file_size || 0;
+
+            // อัพเดทในส่วน Header
+            document.getElementById("header_csv_filename").innerText =
+              data.filename || "-";
+            document.getElementById("header_csv_records").innerText =
+              (data.record_count || 0) + " รายการ";
+
+            // แสดงเวลาล่าสุดเฉพาะเมื่อมีข้อมูล
+            if (data.record_count > 0) {
+              const now = new Date();
+              const timeStr =
+                now.getHours().toString().padStart(2, "0") +
+                ":" +
+                now.getMinutes().toString().padStart(2, "0") +
+                ":" +
+                now.getSeconds().toString().padStart(2, "0");
+              document.getElementById("header_last_log").innerText =
+                "เช็คล่าสุด: " + timeStr;
+            } else {
+              document.getElementById("header_last_log").innerText =
+                "ยังไม่มีข้อมูล";
+            }
           })
           .catch((error) => {
             console.error("Error:", error);
@@ -1043,6 +1082,8 @@
       }
 
       setInterval(updateData, 500);
+      setInterval(refreshCsvStatus, 10000); // อัพเดท CSV status ทุก 10 วินาที
+
       window.onload = function () {
         updateData();
         loadPorts();

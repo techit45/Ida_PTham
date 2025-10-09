@@ -28,40 +28,21 @@ class Camera:
 
     def start(self):
         try:
-            # ลองเปิดกล้องแบบต่างๆ
-            import platform
-            
-            if platform.system() == "Windows":
-                self.cam = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-            else:
-                # macOS/Linux
-                self.cam = cv2.VideoCapture(0)
+            # Windows only - ใช้กล้อง index 1 เสมอ
+            self.cam = cv2.VideoCapture(1, cv2.CAP_DSHOW)
 
             if self.cam.isOpened():
                 self.cam.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
                 self.cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
                 self.running = True
-                print("Camera initialized")
+                print("Camera initialized at index 1 (Windows)")
                 return True
+            else:
+                print("Cannot open camera at index 1")
+                return False
         except Exception as e:
             print(f"Camera error: {e}")
-        
-        # ถ้าไม่สำเร็จ ลองกล้องอื่น
-        for i in range(3):
-            try:
-                self.cam = cv2.VideoCapture(i)
-                if self.cam.isOpened():
-                    self.cam.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                    self.cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                    self.running = True
-                    print(f"Camera initialized at index {i}")
-                    return True
-                self.cam.release()
-            except:
-                continue
-        
-        print("Camera initialization failed")
-        return False
+            return False
 
     def get_frame(self):
         if not self.cam:
@@ -205,24 +186,23 @@ class Arduino:
         self.reading = False
 
     def get_ports(self):
-        # หา COM port ทั้งหมด
-        ports = []
-        all_ports = serial.tools.list_ports.comports()
-        for port in all_ports:
-            ports.append(port.device)
+        # Windows only - แสดง COM ports ที่มี แต่จะใช้ COM4 เป็นหลัก
+        ports = ['COM4']  # กำหนด COM4 เป็นตัวเลือกแรก
+        try:
+            all_ports = serial.tools.list_ports.comports()
+            for port in all_ports:
+                if port.device not in ports:
+                    ports.append(port.device)
+        except:
+            pass
         return ports
 
     def connect(self, port=None):
-        # เตรียม port ที่จะลอง
+        # Windows only - ใช้ COM4 เสมอ
         if port:
             ports = [port]
         else:
-            ports = self.get_ports()
-            # เพิ่ม port ที่พบบ่อยใน macOS/Linux
-            common_ports = ['/dev/ttyUSB0', '/dev/ttyACM0', '/dev/cu.usbserial-1410']
-            for p in common_ports:
-                if p not in ports:
-                    ports.append(p)
+            ports = ['COM4']  # ใช้ COM4 เป็นหลัก
 
         # ลองเชื่อมต่อแต่ละ port
         for p in ports:
@@ -746,7 +726,7 @@ if __name__ == '__main__':
     print("="*40)
 
     camera.start()
-    arduino.connect()
+    arduino.connect('COM4')  # เชื่อมต่อ COM4 โดยตรง
 
     # เริ่ม alarm checker
     start_alarm_check()

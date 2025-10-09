@@ -98,13 +98,18 @@ except Exception as e:
     exit()
 
 # ตรวจสอบว่ามี GPU หรือไม่
-import torch
-if torch.cuda.is_available():
-    device = "0"
-    print("\n✓ พบ GPU: " + torch.cuda.get_device_name(0))
-else:
+try:
+    import torch
+    has_cuda = torch.cuda.is_available()
+    if has_cuda:
+        device = "0"
+        print("\n✓ พบ GPU: " + torch.cuda.get_device_name(0))
+    else:
+        device = "cpu"
+        print("\n! ไม่พบ GPU - ใช้ CPU (จะช้ากว่า)")
+except:
     device = "cpu"
-    print("\n! ไม่พบ GPU - ใช้ CPU (จะช้ากว่า)")
+    print("\n! ใช้ CPU (ไม่มี CUDA)")
 
 # ===== ขั้นตอนที่ 3: เทรน Model =====
 print("\n" + "=" * 60)

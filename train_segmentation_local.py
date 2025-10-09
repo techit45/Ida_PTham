@@ -17,7 +17,7 @@ print("=" * 60)
 DATASET_PATH = "Test Leaf.v1i.yolov11/data.yaml"  # เปลี่ยนเป็นตำแหน่งจริงของ data.yaml
 
 # การตั้งค่าการเทรน
-EPOCHS = 20                    # จำนวนรอบการเทรน (แนะนำ 100-300)
+EPOCHS = 50                    # จำนวนรอบการเทรน (แนะนำ 100-300)
 IMAGE_SIZE = 640               # ขนาดภาพ (640 เป็นค่ามาตรฐาน)
 BATCH_SIZE = 32                # จำนวนภาพต่อรอบ (ลดถ้า RAM ไม่พอ)
 MODEL_SIZE = "yolo11n-seg.pt"  # ขนาด Model: n, s, m, l, x

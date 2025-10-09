@@ -233,6 +233,14 @@
               >
               จุด)
             </p>
+            <p>
+              <strong>สีน้ำตาล:</strong>
+              <span id="brown_status" class="data-display">ไม่พบ</span> (<span
+                id="brown_count"
+                >0</span
+              >
+              จุด)
+            </p>
           </div>
         </div>
 
@@ -509,6 +517,41 @@
             </div>
           </div>
         </div>
+
+        <div class="card">
+          <h2>📊 บันทึกข้อมูล CSV</h2>
+          <p><strong>สถานะไฟล์:</strong> <span id="csv_filename" class="data-display">-</span></p>
+          <p><strong>จำนวนข้อมูล:</strong> <span id="csv_records" class="data-display">0</span> รายการ</p>
+          <p><strong>ขนาดไฟล์:</strong> <span id="csv_size" class="data-display">0</span> bytes</p>
+          
+          <div style="margin: 15px 0;">
+            <h3>บันทึกข้อมูลแบบ Manual</h3>
+            <input type="text" id="manual_position" placeholder="ชื่อตำแหน่ง" style="padding: 10px; margin: 5px; width: 200px;" />
+            <input type="text" id="manual_notes" placeholder="หมายเหตุ" style="padding: 10px; margin: 5px; width: 200px;" />
+            <button class="button" style="background-color: #17a2b8;" onclick="logManualData()">
+              บันทึกข้อมูล
+            </button>
+          </div>
+          
+          <div style="display: flex; justify-content: space-around; margin: 15px 0;">
+            <button class="button" style="background-color: #28a745;" onclick="refreshCsvStatus()">
+              🔄 รีเฟรชสถานะ
+            </button>
+            <button class="button" style="background-color: #007bff;" onclick="downloadCsv()">
+              📥 ดาวน์โหลด CSV
+            </button>
+          </div>
+          
+          <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+            <small>
+              <strong>📋 รูปแบบข้อมูล CSV:</strong><br>
+              • เวลา, ตำแหน่ง X/Y, ชื่อตำแหน่ง<br>
+              • จำนวนสีเขียว/เหลือง/ม่วง/น้ำตาล<br>
+              • สถานะพืช, การวินิจฉัย, หมายเหตุ<br>
+              <em>ข้อมูลจะถูกบันทึกอัตโนมัติก่อนรดน้ำ</em>
+            </small>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -682,6 +725,18 @@
             }
             purpleCount.innerText = data.purple_count;
 
+            // Update brown detection
+            const brownStatus = document.getElementById("brown_status");
+            const brownCount = document.getElementById("brown_count");
+            if (data.brown_detected) {
+              brownStatus.innerText = "พบ";
+              brownStatus.className = "data-display status-detected";
+            } else {
+              brownStatus.innerText = "ไม่พบ";
+              brownStatus.className = "data-display status-not-detected";
+            }
+            brownCount.innerText = data.brown_count;
+
             // Update Arduino status
             const arduinoStatus = document.getElementById("arduino_status");
             const arduinoPort = document.getElementById("arduino_port");
@@ -759,6 +814,12 @@
                 : 0;
               purpleCount.innerText = data.detection_results
                 ? data.detection_results.purple_count
+                : 0;
+                
+              // Update brown count
+              const brownCount = document.getElementById("brown_count");
+              brownCount.innerText = data.detection_results
+                ? data.detection_results.brown_count
                 : 0;
 
               // Update plant status in main data
@@ -843,10 +904,53 @@
           });
       }
 
+      // === CSV Functions ===
+      function logManualData() {
+        const position = document.getElementById("manual_position").value || "Manual";
+        const notes = document.getElementById("manual_notes").value || "";
+        
+        const url = `/log_data?position=${encodeURIComponent(position)}&notes=${encodeURIComponent(notes)}`;
+        
+        fetch(url)
+          .then(response => response.json())
+          .then(data => {
+            if (data.status === "success") {
+              alert(`บันทึกข้อมูลสำเร็จ: ${position}`);
+              document.getElementById("manual_position").value = "";
+              document.getElementById("manual_notes").value = "";
+              refreshCsvStatus();
+            } else {
+              alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+            }
+          })
+          .catch(error => {
+            console.error("Error:", error);
+            alert("เกิดข้อผิดพลาดในการเชื่อมต่อ");
+          });
+      }
+
+      function refreshCsvStatus() {
+        fetch("/csv_status")
+          .then(response => response.json())
+          .then(data => {
+            document.getElementById("csv_filename").innerText = data.filename || "-";
+            document.getElementById("csv_records").innerText = data.record_count || 0;
+            document.getElementById("csv_size").innerText = data.file_size || 0;
+          })
+          .catch(error => {
+            console.error("Error:", error);
+          });
+      }
+
+      function downloadCsv() {
+        window.location.href = "/download_csv";
+      }
+
       setInterval(updateData, 500);
       window.onload = function() {
         updateData();
         loadPorts();
+        refreshCsvStatus(); // โหลดสถานะ CSV เมื่อเริ่มต้น
       };
     </script>
   </body>

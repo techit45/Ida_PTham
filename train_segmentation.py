@@ -97,6 +97,15 @@ except Exception as e:
     print("  pip install ultralytics")
     exit()
 
+# ตรวจสอบว่ามี GPU หรือไม่
+import torch
+if torch.cuda.is_available():
+    device = "0"
+    print("\n✓ พบ GPU: " + torch.cuda.get_device_name(0))
+else:
+    device = "cpu"
+    print("\n! ไม่พบ GPU - ใช้ CPU (จะช้ากว่า)")
+
 # ===== ขั้นตอนที่ 3: เทรน Model =====
 print("\n" + "=" * 60)
 print("ขั้นตอนที่ 3: เริ่มเทรน Model")
@@ -106,6 +115,7 @@ print("จำนวนรอบ: " + str(EPOCHS))
 print("ขนาดภาพ: " + str(IMAGE_SIZE))
 print("Batch Size: " + str(BATCH_SIZE))
 print("Patience: " + str(PATIENCE))
+print("Device: " + device)
 print("\nกำลังเทรน... (อาจใช้เวลา 30 นาที - 2 ชั่วโมง)")
 print("=" * 60)
 
@@ -119,7 +129,7 @@ try:
         name="plant_segmentation",     # ชื่อการเทรนนี้
         patience=PATIENCE,             # หยุดถ้าไม่ดีขึ้น
         save=True,                     # บันทึก Model
-        device=0,                      # ใช้ GPU (ถ้าไม่มีจะใช้ CPU)
+        device=device,                 # ใช้ GPU หรือ CPU
         project="runs/segment",        # โฟลเดอร์เก็บผลลัพธ์
         exist_ok=True                  # อนุญาตให้ทับโฟลเดอร์เดิม
     )

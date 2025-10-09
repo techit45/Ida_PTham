@@ -624,9 +624,12 @@ def moveto():
     # ส่งคำสั่งไป Arduino ให้ไปตำแหน่ง
     p = int(request.args.get('pos', 0))
     if p >= 1 and p <= 4:
-        # บันทึกข้อมูลก่อนเคลื่อนที่
-        position_name = f"Position_{p}"
-        data_logger.log_data(position_name, arduino.encoder_x, arduino.encoder_y, f"Moving to position {p}")
+        # บันทึกข้อมูลเฉพาะในโหมด Auto ก่อนเคลื่อนที่และก่อนรดน้ำ
+        if system.mode == "auto_sequence":
+            position_name = f"Position_{p}"
+            notes = f"Auto sequence - before watering at position {p}"
+            data_logger.log_data(position_name, arduino.encoder_x, arduino.encoder_y, notes)
+            print(f"Auto mode: Data logged for {position_name}")
         
         cmd = "MOVETO:" + str(p) + "\n"
         arduino.send(cmd)
@@ -702,15 +705,6 @@ def setpumpduration():
         arduino.send(cmd)
 
     return "OK"
-
-@app.route('/log_data')
-def log_data_route():
-    # บันทึกข้อมูลแบบ manual
-    position = request.args.get('position', 'Manual')
-    notes = request.args.get('notes', '')
-    
-    success = data_logger.log_data(position, arduino.encoder_x, arduino.encoder_y, notes)
-    return jsonify({"status": "success" if success else "error"})
 
 @app.route('/download_csv')
 def download_csv():

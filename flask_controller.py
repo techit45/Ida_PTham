@@ -1,3 +1,8 @@
+# ===================================
+# โปรเจค: ระบบตรวจสอบพืชและรดน้ำอัตโนมัติ
+# ระบบ: ESP32 + กล้อง + มอเตอร์ 2 แกน
+# ===================================
+
 from flask import Flask, render_template, jsonify, request, Response
 from datetime import datetime
 import cv2
@@ -11,87 +16,101 @@ import os
 
 app = Flask(__name__)
 
-# === กล้อง ===
+# ===================================
+# ส่วนที่ 1: กล้อง (ตรวจจับสีพืช)
+# ===================================
 class Camera:
     def __init__(self):
+        # ตัวแปรพื้นฐาน
         self.cam = None
         self.running = False
-        self.yellow = False
-        self.green = False
-        self.purple = False
-        self.brown = False  # เพิ่มสีน้ำตาล
+
+        # ตัวแปรเก็บสถานะสี (True/False)
+        self.yellow = False  # สีเหลือง
+        self.green = False   # สีเขียว
+        self.purple = False  # สีม่วง
+        self.brown = False   # สีน้ำตาล
+
+        # ตัวแปรนับจำนวนสี
         self.yellow_count = 0
         self.green_count = 0
         self.purple_count = 0
-        self.brown_count = 0  # เพิ่มสีน้ำตาล
+        self.brown_count = 0
+
+        # สถานะพืช
         self.plant_status = "ไม่พบพืช"
 
     def start(self):
+        """เปิดกล้อง"""
         try:
-            # Windows only - ใช้กล้อง index 1 เสมอ
+            # เปิดกล้อง index 1 (Windows)
             self.cam = cv2.VideoCapture(1, cv2.CAP_DSHOW)
 
             if self.cam.isOpened():
+                # ตั้งค่าขนาดภาพ
                 self.cam.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
                 self.cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
                 self.running = True
-                print("Camera initialized at index 1 (Windows)")
+                print("กล้องเปิดสำเร็จ!")
                 return True
             else:
-                print("Cannot open camera at index 1")
+                print("เปิดกล้องไม่ได้")
                 return False
         except Exception as e:
-            print(f"Camera error: {e}")
+            print("ผิดพลาด: " + str(e))
             return False
 
     def get_frame(self):
+        """อ่านภาพจากกล้องและตรวจจับสี"""
+        # เช็คว่ากล้องพร้อมหรือไม่
         if not self.cam:
             return None
         if not self.cam.isOpened():
             return None
 
+        # อ่านภาพจากกล้อง
         ret, frame = self.cam.read()
         if not ret:
             return None
 
-        # แปลงเป็นสี HSV
+        # แปลงภาพเป็น HSV (สำหรับตรวจจับสี)
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-        # หาสีเหลือง (เพิ่ม Saturation และ Value เพื่อไม่ให้เจอพื้นมืด)
-        yellow_low = np.array([20, 100, 100])
-        yellow_high = np.array([30, 255, 255])
+        # --- ตรวจจับสีเหลือง (ขาดไนโตรเจน) ---
+        yellow_low = np.array([20, 100, 100])   # ค่าต่ำสุด HSV
+        yellow_high = np.array([30, 255, 255])  # ค่าสูงสุด HSV
         yellow_mask = cv2.inRange(hsv, yellow_low, yellow_high)
         yellow_contours, _ = cv2.findContours(yellow_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        # หาสีเขียว (เพิ่ม Saturation และ Value เพื่อไม่ให้เจอพื้นมืด)
+        # --- ตรวจจับสีเขียว (พืชปกติ) ---
         green_low = np.array([40, 80, 80])
         green_high = np.array([80, 255, 255])
         green_mask = cv2.inRange(hsv, green_low, green_high)
         green_contours, _ = cv2.findContours(green_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        # หาสีม่วง (เพิ่ม Saturation และ Value เพื่อไม่ให้เจอพื้นมืด)
+        # --- ตรวจจับสีม่วง (ขาดฟอสฟอรัส) ---
         purple_low = np.array([125, 100, 100])
         purple_high = np.array([155, 255, 255])
         purple_mask = cv2.inRange(hsv, purple_low, purple_high)
         purple_contours, _ = cv2.findContours(purple_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        # หาสีน้ำตาล (ขาดโพแทสเซียม)
+        # --- ตรวจจับสีน้ำตาล (ขาดโพแทสเซียม) ---
         brown_low = np.array([8, 50, 50])
         brown_high = np.array([19, 255, 200])
         brown_mask = cv2.inRange(hsv, brown_low, brown_high)
         brown_contours, _ = cv2.findContours(brown_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        # นับสีเหลือง
+        # --- นับและวาดกรอบสีเหลือง ---
         self.yellow_count = 0
         for c in yellow_contours:
             area = cv2.contourArea(c)
-            if area > 500:
+            if area > 500:  # ถ้าพื้นที่ > 500 ถึงจะนับ
                 self.yellow_count = self.yellow_count + 1
                 x, y, w, h = cv2.boundingRect(c)
-                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 255), 2)
+                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 255), 2)  # วาดกรอบสีเหลือง
                 cv2.putText(frame, 'YELLOW', (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
-        # นับสีเขียว
+        # --- นับและวาดกรอบสีเขียว ---
         self.green_count = 0
         for c in green_contours:
             area = cv2.contourArea(c)
@@ -101,7 +120,7 @@ class Camera:
                 cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
                 cv2.putText(frame, 'GREEN', (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
-        # นับสีม่วง
+        # --- นับและวาดกรอบสีม่วง ---
         self.purple_count = 0
         for c in purple_contours:
             area = cv2.contourArea(c)
@@ -111,7 +130,7 @@ class Camera:
                 cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 255), 2)
                 cv2.putText(frame, 'PURPLE', (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
 
-        # นับสีน้ำตาล
+        # --- นับและวาดกรอบสีน้ำตาล ---
         self.brown_count = 0
         for c in brown_contours:
             area = cv2.contourArea(c)
@@ -121,48 +140,38 @@ class Camera:
                 cv2.rectangle(frame, (x, y), (x+w, y+h), (42, 42, 165), 2)
                 cv2.putText(frame, 'BROWN', (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (42, 42, 165), 2)
 
-        # เช็คว่าพบสีหรือไม่
-        if self.yellow_count > 0:
-            self.yellow = True
-        else:
-            self.yellow = False
+        # --- อัปเดตสถานะสี (True/False) ---
+        self.yellow = (self.yellow_count > 0)
+        self.green = (self.green_count > 0)
+        self.purple = (self.purple_count > 0)
+        self.brown = (self.brown_count > 0)
 
-        if self.green_count > 0:
-            self.green = True
-        else:
-            self.green = False
-
-        if self.purple_count > 0:
-            self.purple = True
-        else:
-            self.purple = False
-
-        if self.brown_count > 0:
-            self.brown = True
-        else:
-            self.brown = False
-
-        # ดูสภาพพืช
-        if self.brown == True and self.green == False and self.yellow == False and self.purple == False:
+        # --- วิเคราะห์สถานะพืช ---
+        # ถ้าเจอเฉพาะสีน้ำตาล = ขาดโพแทสเซียม
+        if self.brown and not self.green and not self.yellow and not self.purple:
             self.plant_status = "ขาดโพแทสเซียม"
-        elif self.yellow == True and self.green == False and self.purple == False and self.brown == False:
+
+        # ถ้าเจอเฉพาะสีเหลือง = ขาดไนโตรเจน
+        elif self.yellow and not self.green and not self.purple and not self.brown:
             self.plant_status = "ขาดไนโตรเจน"
-        elif self.purple == True and self.green == False and self.yellow == False and self.brown == False:
+
+        # ถ้าเจอเฉพาะสีม่วง = ขาดฟอสฟอรัส
+        elif self.purple and not self.green and not self.yellow and not self.brown:
             self.plant_status = "ขาดฟอสฟอรัส"
-        elif self.yellow == True and self.purple == True:
-            self.plant_status = "ขาดไนโตรเจนและฟอสฟอรัส"
-        elif self.yellow == True and self.brown == True:
-            self.plant_status = "ขาดไนโตรเจนและโพแทสเซียม"
-        elif self.purple == True and self.brown == True:
-            self.plant_status = "ขาดฟอสฟอรัสและโพแทสเซียม"
-        elif self.green == True and self.yellow == False and self.purple == False and self.brown == False:
+
+        # ถ้าเจอเฉพาะสีเขียว = พืชปกติ
+        elif self.green and not self.yellow and not self.purple and not self.brown:
             self.plant_status = "พืชปกติ"
-        elif self.green == True:
+
+        # ถ้าเจอสีเขียวปนกับสีอื่น = พืชปกติบางส่วน
+        elif self.green:
             self.plant_status = "พืชปกติบางส่วน มีอาการขาดธาตุบางส่วน"
+
+        # ถ้าไม่เจออะไร = ไม่พบพืช
         else:
             self.plant_status = "ไม่พบพืช"
 
-        # เขียนข้อความบนภาพ
+        # --- แสดงข้อมูลบนภาพ ---
         text1 = "Y:" + str(self.yellow_count) + " G:" + str(self.green_count) + " P:" + str(self.purple_count) + " B:" + str(self.brown_count)
         cv2.putText(frame, text1, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         cv2.putText(frame, self.plant_status, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
@@ -170,24 +179,32 @@ class Camera:
         return frame
 
     def stop(self):
+        """ปิดกล้อง"""
         self.running = False
         if self.cam:
             self.cam.release()
             self.cam = None
 
-# === Arduino ===
+# ===================================
+# ส่วนที่ 2: Arduino (เชื่อมต่อ ESP32)
+# ===================================
 class Arduino:
     def __init__(self):
+        # ตัวแปรเชื่อมต่อ Serial
         self.ser = None
         self.connected = False
         self.port = None
+
+        # ตัวแปรเก็บตำแหน่ง Encoder
         self.encoder_x = 0
         self.encoder_y = 0
+
+        # สถานะการอ่านข้อมูล
         self.reading = False
 
     def get_ports(self):
-        # Windows only - แสดง COM ports ที่มี แต่จะใช้ COM4 เป็นหลัก
-        ports = ['COM4']  # กำหนด COM4 เป็นตัวเลือกแรก
+        """หา COM Port ทั้งหมด (Windows)"""
+        ports = ['COM4']  # ให้ COM4 เป็นตัวเลือกแรก
         try:
             all_ports = serial.tools.list_ports.comports()
             for port in all_ports:
@@ -198,48 +215,49 @@ class Arduino:
         return ports
 
     def connect(self, port=None):
-        # Windows only - ใช้ COM4 เสมอ
+        """เชื่อมต่อ Arduino ผ่าน Serial"""
+        # ถ้าระบุ port มา ใช้ port นั้น ถ้าไม่ระบุ ใช้ COM4
         if port:
             ports = [port]
         else:
-            ports = ['COM4']  # ใช้ COM4 เป็นหลัก
+            ports = ['COM4']
 
-        # ลองเชื่อมต่อแต่ละ port
+        # ลองเชื่อมต่อทีละ port
         for p in ports:
             try:
-                print(f"Trying {p}...")
+                print("กำลังเชื่อมต่อ " + p + "...")
 
-                # เปิด port
+                # เปิด Serial Port (ความเร็ว 115200)
                 self.ser = serial.Serial(p, 115200, timeout=1)
-                time.sleep(2)
+                time.sleep(2)  # รอให้ Arduino พร้อม
 
-                # ลบข้อมูลเก่า
+                # ล้างข้อมูลเก่าทิ้ง
                 self.ser.reset_input_buffer()
                 self.ser.reset_output_buffer()
 
-                # ลอง PING 2 ครั้ง
+                # ลองส่ง PING 2 ครั้ง
                 success = False
-                for i in range(2):
+                for _ in range(2):
                     self.ser.write(b"PING\n")
                     time.sleep(0.5)
 
-                    # ดูว่ามีข้อมูลกลับมาไหม
+                    # ถ้ามีข้อมูลตอบกลับมา
                     if self.ser.in_waiting > 0:
                         data = self.ser.readline()
                         response = data.decode('utf-8', errors='ignore').strip()
-                        print(f"Response: {response}")
+                        print("ได้รับ: " + response)
 
-                        # ถ้าได้ PONG กลับมา
+                        # ถ้าได้ PONG กลับมา = เชื่อมต่อสำเร็จ
                         if "PONG" in response:
                             self.connected = True
                             self.port = p
                             self.reading = True
 
-                            # เริ่ม thread อ่านข้อมูล
+                            # เริ่ม thread อ่านข้อมูลจาก Arduino
                             t = threading.Thread(target=self.read_loop, daemon=True)
                             t.start()
 
-                            print(f"Arduino connected: {p}")
+                            print("เชื่อมต่อสำเร็จ: " + p)
                             success = True
                             break
 
@@ -255,25 +273,25 @@ class Arduino:
                 except:
                     pass
 
-        print("Arduino not found - simulation mode")
+        print("ไม่พบ Arduino - ใช้โหมดจำลอง")
         return False
 
     def read_loop(self):
-        # อ่านข้อมูลจาก Arduino ตลอดเวลา
-        while self.reading == True and self.connected == True:
+        """อ่านข้อมูลจาก Arduino ตลอดเวลา (ทำงานใน Thread แยก)"""
+        while self.reading and self.connected:
             try:
-                # ถ้ามีข้อมูล
+                # ถ้ามีข้อมูลมาจาก Arduino
                 if self.ser and self.ser.in_waiting > 0:
-                    # อ่านข้อมูล
-                    line = self.ser.readline()
-                    data = line.decode('utf-8', errors='ignore').strip()
+                    # อ่านข้อมูล 1 บรรทัด
+                    _ = self.ser.readline()
+                    data = _.decode('utf-8', errors='ignore').strip()
 
-                    # ถ้าเป็นข้อมูล STATUS
+                    # ถ้าเป็นข้อมูล STATUS (ตำแหน่ง Encoder)
                     if data.startswith("STATUS:"):
                         # ตัดคำว่า STATUS: ออก
                         data = data.replace("STATUS:", "")
 
-                        # แยกด้วย ,
+                        # แยกข้อมูลด้วย ,
                         parts = data.split(",")
 
                         # หาค่า X และ Y
@@ -290,6 +308,7 @@ class Arduino:
                 pass
 
     def send(self, cmd):
+        """ส่งคำสั่งไป Arduino"""
         if self.connected and self.ser:
             try:
                 self.ser.write(cmd.encode())
@@ -299,38 +318,44 @@ class Arduino:
         return False
 
     def close(self):
+        """ปิดการเชื่อมต่อ"""
         self.reading = False
         self.connected = False
         if self.ser:
             self.ser.close()
 
-# === บันทึกข้อมูล CSV ===
+# ===================================
+# ส่วนที่ 3: บันทึกข้อมูล CSV
+# ===================================
 class DataLogger:
     def __init__(self):
-        self.csv_filename = f"plant_data_{datetime.now().strftime('%Y%m%d')}.csv"
+        # สร้างชื่อไฟล์ตามวันที่ (เช่น plant_data_20250115.csv)
+        self.csv_filename = "plant_data_" + datetime.now().strftime('%Y%m%d') + ".csv"
         self.csv_path = os.path.join(os.getcwd(), self.csv_filename)
         self.init_csv()
-    
+
     def init_csv(self):
-        # สร้างไฟล์ CSV หรือเพิ่ม header ถ้ายังไม่มี
+        """สร้างไฟล์ CSV และใส่ header"""
         if not os.path.exists(self.csv_path):
             with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
+                # เขียน Header
                 writer.writerow([
                     'Timestamp', 'Position_X', 'Position_Y', 'Position_Name',
                     'Green_Count', 'Yellow_Count', 'Purple_Count', 'Brown_Count',
                     'Plant_Status', 'Diagnosis', 'Notes'
                 ])
-            print(f"Created CSV file: {self.csv_path}")
-    
+            print("สร้างไฟล์ CSV: " + self.csv_path)
+
     def log_data(self, position_name, position_x=0, position_y=0, notes=""):
-        """บันทึกข้อมูลพืชในตำแหน่งที่ระบุ"""
+        """บันทึกข้อมูลพืชลง CSV"""
+        # เวลาขณะนี้
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
+
         # วิเคราะห์สถานะพืช
         diagnosis = self.analyze_plant_status()
-        
-        # เขียนข้อมูลลง CSV
+
+        # เขียนข้อมูลลงไฟล์ CSV
         with open(self.csv_path, 'a', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             writer.writerow([
@@ -338,28 +363,35 @@ class DataLogger:
                 camera.green_count, camera.yellow_count, camera.purple_count, camera.brown_count,
                 camera.plant_status, diagnosis, notes
             ])
-        
-        print(f"Logged data for position {position_name}: {diagnosis}")
+
+        print("บันทึกข้อมูล: " + position_name + " -> " + diagnosis)
         return True
-    
+
     def analyze_plant_status(self):
-        """วิเคราะห์สถานะพืชสำหรับบันทึก CSV"""
+        """วิเคราะห์สถานะธาตุอาหารของพืช"""
         green = camera.green_count
         yellow = camera.yellow_count
         purple = camera.purple_count
         brown = camera.brown_count
-        
-        # ประเมินสถานะตามสีที่พบ
+
+        # กรณีเจอเฉพาะสีเขียว = ปกติ
         if green > 0 and yellow == 0 and purple == 0 and brown == 0:
             return "ปกติ"
+
+        # กรณีเจอเฉพาะสีเหลือง = ขาดไนโตรเจน
         elif yellow > 0 and green == 0 and purple == 0 and brown == 0:
             return "ขาดไนโตรเจน"
+
+        # กรณีเจอเฉพาะสีม่วง = ขาดฟอสฟอรัส
         elif purple > 0 and green == 0 and yellow == 0 and brown == 0:
             return "ขาดฟอสฟอรัส"
+
+        # กรณีเจอเฉพาะสีน้ำตาล = ขาดโพแทสเซียม
         elif brown > 0 and green == 0 and yellow == 0 and purple == 0:
             return "ขาดโพแทสเซียม"
+
+        # กรณีเจอสีเขียวปนกับสีอื่น = ขาดธาตุหลายอย่าง
         elif green > 0:
-            # มีสีเขียวปนกับสีอื่น
             deficiencies = []
             if yellow > 0:
                 deficiencies.append("ไนโตรเจน")
@@ -367,84 +399,112 @@ class DataLogger:
                 deficiencies.append("ฟอสฟอรัส")
             if brown > 0:
                 deficiencies.append("โพแทสเซียม")
-            return f"ปกติบางส่วน-ขาด{'+'.join(deficiencies)}"
+            return "ปกติบางส่วน-ขาด" + "+".join(deficiencies)
+
+        # ไม่เจอพืช
         else:
             return "ไม่พบพืช"
 
-# === ระบบ ===
-camera = Camera()
-arduino = Arduino()
-data_logger = DataLogger()
+# ===================================
+# ส่วนที่ 4: สร้าง Object ต่างๆ
+# ===================================
+camera = Camera()           # Object กล้อง
+arduino = Arduino()         # Object Arduino
+data_logger = DataLogger()  # Object บันทึก CSV
 
 class System:
+    """ระบบควบคุมทั่วไป"""
     def __init__(self):
+        # ตำแหน่ง
         self.x = 0
         self.y = 0
         self.moving = False
-        self.mode = "manual"
+
+        # โหมด
+        self.mode = "manual"  # manual หรือ auto_sequence
         self.step = 0
-        # สร้าง alarm 3 ตัว
+
+        # Alarm 3 ตัว (ตั้งเวลารดน้ำ)
         self.alarms = []
         self.alarms.append({"isEnabled": False, "time": ""})
         self.alarms.append({"isEnabled": False, "time": ""})
         self.alarms.append({"isEnabled": False, "time": ""})
+
+        # กล้อง
         self.cam_on = False
 
-
-
-
-
-
-        self.pump_duration = 5  # ระยะเวลาเปิดปั๊ม (วินาที)
+        # ปั๊มน้ำ
+        self.pump_duration = 5  # เปิดปั๊ม 5 วินาที
 
 system = System()
 
-# ฟังก์ชันส่งข้อมูลสี
+# ===================================
+# ฟังก์ชันช่วย (Helper Functions)
+# ===================================
+
 def send_color_loop():
+    """ส่งข้อมูลสีไป Arduino ทุกๆ 1 วินาที"""
     last = 0
     while camera.running:
         try:
+            # ถ้าผ่านไป 1 วินาทีแล้ว
             if time.time() - last >= 1.0:
+                # ถ้าเจอสีอย่างใดอย่างหนึ่ง
                 if camera.yellow or camera.green or camera.purple or camera.brown:
-                    # สร้างคำสั่งส่งข้อมูลสี (เพิ่มสีน้ำตาล)
-                    cmd = "COLOR:" + str(int(camera.yellow)) + "," + str(int(camera.green)) + "," + str(int(camera.purple)) + "," + str(int(camera.brown)) + "," + str(camera.yellow_count) + "," + str(camera.green_count) + "," + str(camera.purple_count) + "," + str(camera.brown_count) + "\n"
+                    # สร้างคำสั่ง COLOR (สถานะ 4 สี + จำนวน 4 สี)
+                    cmd = "COLOR:" + str(int(camera.yellow)) + "," + str(int(camera.green)) + ","
+                    cmd = cmd + str(int(camera.purple)) + "," + str(int(camera.brown)) + ","
+                    cmd = cmd + str(camera.yellow_count) + "," + str(camera.green_count) + ","
+                    cmd = cmd + str(camera.purple_count) + "," + str(camera.brown_count) + "\n"
                     arduino.send(cmd)
                 last = time.time()
             time.sleep(0.1)
         except:
             time.sleep(1)
 
-# ฟังก์ชันส่งภาพ
 def video_stream():
+    """ส่งภาพกล้องไปแสดงบนเว็บ (Real-time streaming)"""
     while True:
         try:
+            # ถ้ากล้องเปิด แสดงภาพจริง
             if system.cam_on:
                 frame = camera.get_frame()
+            # ถ้ากล้องปิด แสดงภาพดำ
             else:
                 frame = np.zeros((480, 640, 3), dtype=np.uint8)
                 cv2.putText(frame, 'Camera Off', (200, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
+            # ถ้าไม่มีภาพ สร้างภาพดำ
             if frame is None:
                 frame = np.zeros((480, 640, 3), dtype=np.uint8)
 
+            # แปลงเป็น JPEG และส่งออกไป
             ret, jpg = cv2.imencode('.jpg', frame)
             if ret:
                 yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + jpg.tobytes() + b'\r\n')
-            time.sleep(0.03)
+            time.sleep(0.03)  # 30 FPS
         except:
             time.sleep(0.5)
 
-# === หน้าเว็บ ===
+# ===================================
+# ส่วนที่ 5: Flask Routes (หน้าเว็บและ API)
+# ===================================
+# --- หน้าเว็บหลัก ---
 @app.route('/')
 def index():
+    """แสดงหน้าเว็บหลัก"""
     return render_template('web_interface.html')
 
+# --- ส่งภาพกล้อง ---
 @app.route('/video_feed')
 def video():
+    """ส่งภาพ Real-time ไปแสดงบนเว็บ"""
     return Response(video_stream(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+# --- ควบคุมกล้อง ---
 @app.route('/camera_control')
 def cam_ctrl():
+    """เปิด/ปิดกล้อง"""
     action = request.args.get('action')
     if action == 'start' and not system.cam_on:
         if camera.start():
@@ -601,16 +661,17 @@ def motor():
 
 @app.route('/moveto')
 def moveto():
-    # ส่งคำสั่งไป Arduino ให้ไปตำแหน่ง
+    """เคลื่อนที่ไปตำแหน่งที่กำหนด (Position 1-4)"""
     p = int(request.args.get('pos', 0))
     if p >= 1 and p <= 4:
-        # บันทึกข้อมูลเฉพาะในโหมด Auto ก่อนเคลื่อนที่และก่อนรดน้ำ
+        # *** สำคัญ: บันทึกข้อมูลก่อนเคลื่อนที่ในโหมด Auto ***
         if system.mode == "auto_sequence":
-            position_name = f"Position_{p}"
-            notes = f"Auto sequence - before watering at position {p}"
+            position_name = "Position_" + str(p)
+            notes = "Auto sequence - before watering at position " + str(p)
             data_logger.log_data(position_name, arduino.encoder_x, arduino.encoder_y, notes)
-            print(f"Auto mode: Data logged for {position_name}")
-        
+            print("บันทึกข้อมูล: " + position_name)
+
+        # ส่งคำสั่งไป Arduino
         cmd = "MOVETO:" + str(p) + "\n"
         arduino.send(cmd)
     return "OK"
@@ -659,15 +720,20 @@ def reset():
 
 @app.route('/pump')
 def pump():
-    # ควบคุมปั๊มน้ำ
+    """ควบคุมปั๊มน้ำ (เปิด/ปิด)"""
     action = request.args.get('action')
     position = request.args.get('position', 'Current')
 
     if action == 'on':
-        # บันทึกข้อมูลก่อนรดน้ำ
-        data_logger.log_data(f"Pump_{position}", arduino.encoder_x, arduino.encoder_y, "Before watering")
+        # *** สำคัญ: บันทึกข้อมูลก่อนรดน้ำ ***
+        position_name = "Pump_" + position
+        data_logger.log_data(position_name, arduino.encoder_x, arduino.encoder_y, "Before watering")
+        print("บันทึกข้อมูลก่อนรดน้ำ")
+
+        # เปิดปั๊ม
         arduino.send("PUMP:ON\n")
     elif action == 'off':
+        # ปิดปั๊ม
         arduino.send("PUMP:OFF\n")
 
     return "OK"
@@ -686,31 +752,33 @@ def setpumpduration():
 
     return "OK"
 
+# --- ดาวน์โหลด CSV ---
 @app.route('/download_csv')
 def download_csv():
-    # ส่งไฟล์ CSV สำหรับดาวน์โหลด
+    """ดาวน์โหลดไฟล์ CSV"""
     from flask import send_file
     try:
         return send_file(data_logger.csv_path, as_attachment=True, download_name=data_logger.csv_filename)
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
 
+# --- สถานะ CSV ---
 @app.route('/csv_status')
 def csv_status():
-    # ดูสถานะไฟล์ CSV
+    """ดูสถานะไฟล์ CSV (มีหรือไม่ จำนวน record)"""
     file_exists = os.path.exists(data_logger.csv_path)
     file_size = 0
     record_count = 0
-    
+
     if file_exists:
         file_size = os.path.getsize(data_logger.csv_path)
-        # นับจำนวน record
+        # นับจำนวน record (ลบ header 1 บรรทัด)
         try:
             with open(data_logger.csv_path, 'r', encoding='utf-8') as f:
-                record_count = sum(1 for line in f) - 1  # ลบ header
+                record_count = sum(1 for _ in f) - 1
         except:
             pass
-    
+
     return jsonify({
         "file_exists": file_exists,
         "filename": data_logger.csv_filename,
@@ -719,27 +787,34 @@ def csv_status():
         "file_path": data_logger.csv_path
     })
 
-# === เริ่มโปรแกรม ===
+# ===================================
+# ส่วนที่ 6: เริ่มโปรแกรม
+# ===================================
 if __name__ == '__main__':
     print("\n" + "="*40)
-    print("ESP32 Controller")
+    print("ระบบตรวจสอบพืชและรดน้ำอัตโนมัติ")
     print("="*40)
 
+    # เปิดกล้อง
     camera.start()
-    arduino.connect('COM4')  # เชื่อมต่อ COM4 โดยตรง
 
-    # เริ่ม alarm checker
+    # เชื่อมต่อ Arduino (COM4)
+    arduino.connect('COM4')
+
+    # เริ่ม Alarm Checker (ตรวจสอบเวลารดน้ำ)
     start_alarm_check()
 
-    print("="*40 + "\n")
-    print("Server: http://localhost:5001")
+    print("="*40)
+    print("เว็บเซิร์ฟเวอร์: http://localhost:5001")
     print("="*40 + "\n")
 
     try:
+        # เริ่ม Flask Server
         app.run(host='0.0.0.0', port=5001, debug=False, use_reloader=False)
     except KeyboardInterrupt:
-        print("\nStopping...")
+        print("\nกำลังหยุดโปรแกรม...")
     finally:
+        # ปิดกล้องและ Arduino
         camera.stop()
         arduino.close()
-        print("Done.")
+        print("เสร็จสิ้น!")

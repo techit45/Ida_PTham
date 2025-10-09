@@ -1,0 +1,1 @@
+- alway use code like a student writing use basic code not harder

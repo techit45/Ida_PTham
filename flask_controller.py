@@ -51,20 +51,20 @@ class Camera:
         # แปลงเป็นสี HSV
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-        # หาสีเหลือง
-        yellow_low = np.array([20, 80, 80])
+        # หาสีเหลือง (เพิ่ม Saturation และ Value เพื่อไม่ให้เจอพื้นมืด)
+        yellow_low = np.array([20, 100, 100])
         yellow_high = np.array([30, 255, 255])
         yellow_mask = cv2.inRange(hsv, yellow_low, yellow_high)
         yellow_contours, _ = cv2.findContours(yellow_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        # หาสีเขียว
-        green_low = np.array([40, 60, 60])
+        # หาสีเขียว (เพิ่ม Saturation และ Value เพื่อไม่ให้เจอพื้นมืด)
+        green_low = np.array([40, 80, 80])
         green_high = np.array([80, 255, 255])
         green_mask = cv2.inRange(hsv, green_low, green_high)
         green_contours, _ = cv2.findContours(green_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        # หาสีม่วง
-        purple_low = np.array([125, 80, 80])
+        # หาสีม่วง (เพิ่ม Saturation และ Value เพื่อไม่ให้เจอพื้นมืด)
+        purple_low = np.array([125, 100, 100])
         purple_high = np.array([155, 255, 255])
         purple_mask = cv2.inRange(hsv, purple_low, purple_high)
         purple_contours, _ = cv2.findContours(purple_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -278,7 +278,11 @@ class System:
         self.moving = False
         self.mode = "manual"
         self.step = 0
-        self.alarms = [{"isEnabled": False, "time": ""} for i in range(3)]
+        # สร้าง alarm 3 ตัว
+        self.alarms = []
+        self.alarms.append({"isEnabled": False, "time": ""})
+        self.alarms.append({"isEnabled": False, "time": ""})
+        self.alarms.append({"isEnabled": False, "time": ""})
         self.cam_on = False
 
 system = System()
@@ -290,7 +294,8 @@ def send_color_loop():
         try:
             if time.time() - last >= 1.0:
                 if camera.yellow or camera.green or camera.purple:
-                    cmd = f"COLOR:{int(camera.yellow)},{int(camera.green)},{int(camera.purple)},{camera.yellow_count},{camera.green_count},{camera.purple_count}\n"
+                    # สร้างคำสั่งส่งข้อมูลสี
+                    cmd = "COLOR:" + str(int(camera.yellow)) + "," + str(int(camera.green)) + "," + str(int(camera.purple)) + "," + str(camera.yellow_count) + "," + str(camera.green_count) + "," + str(camera.purple_count) + "\n"
                     arduino.send(cmd)
                 last = time.time()
             time.sleep(0.1)
@@ -347,6 +352,44 @@ def start_status_loop():
             time.sleep(1)
     threading.Thread(target=loop, daemon=True).start()
 
+def start_alarm_check():
+    # เช็คเวลาทุก 30 วินาที
+    def loop():
+        last_triggered_minute = -1  # เก็บนาทีที่ trigger ล่าสุด
+
+        while True:
+            try:
+                if system.mode == "auto_sequence":
+                    now = datetime.now()
+                    current_hour = now.hour
+                    current_minute = now.minute
+
+                    # ถ้านาทีนี้ trigger ไปแล้ว ข้าม
+                    if current_minute == last_triggered_minute:
+                        time.sleep(30)
+                        continue
+
+                    # เช็คแต่ละ alarm
+                    for alarm in system.alarms:
+                        if alarm["isEnabled"] and alarm["time"]:
+                            # แยกเวลา
+                            parts = alarm["time"].split(":")
+                            alarm_hour = int(parts[0])
+                            alarm_minute = int(parts[1])
+
+                            # ถ้าตรงเวลา
+                            if current_hour == alarm_hour and current_minute == alarm_minute:
+                                print("ถึงเวลาแล้ว! เริ่ม sequence")
+                                arduino.send("START_SEQUENCE\n")
+                                last_triggered_minute = current_minute
+                                break  # ออกจาก loop ทันที
+
+                time.sleep(30)  # เช็คทุก 30 วินาที
+            except:
+                time.sleep(30)
+
+    threading.Thread(target=loop, daemon=True).start()
+
 @app.route('/arduino_control')
 def ard_ctrl():
     action = request.args.get('action')
@@ -360,7 +403,9 @@ def ard_ctrl():
         ok = arduino.connect(port)
         if ok:
             start_status_loop()
-        return jsonify({"status": "success" if ok else "error", "connected": ok, "port": arduino.port})
+            return jsonify({"status": "success", "connected": True, "port": arduino.port})
+        else:
+            return jsonify({"status": "error", "connected": False, "port": arduino.port})
 
     if action == 'disconnect':
         arduino.close()
@@ -371,10 +416,16 @@ def ard_ctrl():
         ok = arduino.connect()
         if ok:
             start_status_loop()
-        return jsonify({"status": "success" if ok else "error", "connected": ok, "port": arduino.port})
+            return jsonify({"status": "success", "connected": True, "port": arduino.port})
+        else:
+            return jsonify({"status": "error", "connected": False, "port": arduino.port})
 
     if action in ['X_FWD', 'X_BACK', 'Y_FWD', 'Y_BACK', 'STOP']:
-        return jsonify({"status": "success" if arduino.send(f"MOTOR:{action}\n") else "error"})
+        cmd = "MOTOR:" + action + "\n"
+        if arduino.send(cmd):
+            return jsonify({"status": "success"})
+        else:
+            return jsonify({"status": "error"})
 
     return jsonify({"status": "error"})
 
@@ -437,7 +488,8 @@ def moveto():
     # ส่งคำสั่งไป Arduino ให้ไปตำแหน่ง
     p = int(request.args.get('pos', 0))
     if p >= 1 and p <= 4:
-        arduino.send(f"MOVETO:{p}\n")
+        cmd = "MOVETO:" + str(p) + "\n"
+        arduino.send(cmd)
     return "OK"
 
 @app.route('/setmode')
@@ -490,6 +542,9 @@ if __name__ == '__main__':
 
     camera.start()
     arduino.connect()
+
+    # เริ่ม alarm checker
+    start_alarm_check()
 
     print("="*40 + "\n")
     print("Server: http://localhost:5001")

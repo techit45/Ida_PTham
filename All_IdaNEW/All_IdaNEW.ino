@@ -43,8 +43,21 @@ void Backward_Y() { digitalWrite(motorIn3, LOW); digitalWrite(motorIn4, HIGH); a
 void stopMotor() { digitalWrite(motorIn1, LOW); digitalWrite(motorIn2, LOW); digitalWrite(motorIn3, LOW); digitalWrite(motorIn4, LOW); analogWrite(motorENA, 0); analogWrite(motorENB, 0); }
 
 // === ENCODER READING ===
-void IRAM_ATTR readEncoder_X() { encoderValue_X += (digitalRead(encoderPinA_X) == digitalRead(encoderPinB_X)) ? 1 : -1; }
-void IRAM_ATTR readEncoder_Y() { encoderValue_Y += (digitalRead(encoderPinA_Y) == digitalRead(encoderPinB_Y)) ? 1 : -1; }
+void IRAM_ATTR readEncoder_X() {
+  if (digitalRead(encoderPinA_X) == digitalRead(encoderPinB_X)) {
+    encoderValue_X = encoderValue_X + 1;
+  } else {
+    encoderValue_X = encoderValue_X - 1;
+  }
+}
+
+void IRAM_ATTR readEncoder_Y() {
+  if (digitalRead(encoderPinA_Y) == digitalRead(encoderPinB_Y)) {
+    encoderValue_Y = encoderValue_Y + 1;
+  } else {
+    encoderValue_Y = encoderValue_Y - 1;
+  }
+}
 
 // === POSITION CONTROL ===
 void setTargetPosition(int pos) {
@@ -70,7 +83,12 @@ void handleAutomatedMovement() {
       stopMotor();
       currentMoveState = MOVING_Y;
     } else {
-      (encoderValue_X < targetEncoderX) ? Forward_X() : Backward_X();
+      // เคลื่อนที่แกน X
+      if (encoderValue_X < targetEncoderX) {
+        Forward_X();
+      } else {
+        Backward_X();
+      }
     }
   }
   else if (currentMoveState == MOVING_Y) {
@@ -79,34 +97,71 @@ void handleAutomatedMovement() {
       currentMoveState = IDLE;
       Serial.println("Movement complete");
     } else {
-      (encoderValue_Y < targetEncoderY) ? Forward_Y() : Backward_Y();
+      // เคลื่อนที่แกน Y
+      if (encoderValue_Y < targetEncoderY) {
+        Forward_Y();
+      } else {
+        Backward_Y();
+      }
     }
   }
 }
 
+// === CHECK ALARM TIME ===
+bool checkAlarmTime() {
+  // ตรวจสอบว่าถึงเวลา alarm หรือยัง (ต้องมี RTC จริงๆ)
+  // ตอนนี้ยังไม่มี RTC ก็ไม่ทำอะไร
+  // ถ้ามี RTC ให้เช็คว่าเวลาตรงกับ alarm ที่ตั้งไว้หรือไม่
+
+  for (int i = 0; i < NUM_ALARMS; i++) {
+    if (alarms[i].isEnabled) {
+      // TODO: เช็คกับเวลาจริงจาก RTC
+      // if (currentHour == alarms[i].hour && currentMinute == alarms[i].minute) {
+      //   return true;
+      // }
+    }
+  }
+  return false;
+}
+
 // === TIMED SEQUENCE ===
 void handleTimedSequence() {
-  if (timedSequenceStep == 0 || currentMoveState != IDLE) return;
+  // ทำงานเฉพาะใน AUTO_SEQUENCE mode และเมื่อ idle
+  if (currentMode != AUTO_SEQUENCE) return;
+  if (currentMoveState != IDLE) return;
 
-  if (timedSequenceStep == 1) {
-    setTargetPosition(1);
-    timedSequenceStep++;
+  // ตรวจสอบว่าเริ่ม sequence หรือยัง
+  if (timedSequenceStep == 0) {
+    // รอให้ Python ส่งสัญญาณ START_SEQUENCE (เมื่อถึงเวลา alarm)
     return;
   }
 
-  if (timedSequenceWaitStartTime == 0) {
-    if (timedSequenceStep > 5) {
-      Serial.println("Sequence completed");
-      timedSequenceStep = 0;
-      return;
-    }
-    timedSequenceWaitStartTime = millis();
+  // ขั้นตอนที่ 1: กลับ HOME ทันที
+  if (timedSequenceStep == 1) {
+    setTargetPosition(1);
+    timedSequenceStep = 2;
+    timedSequenceWaitStartTime = millis();  // เริ่มนับเวลารอ
+    return;
   }
 
-  if (millis() - timedSequenceWaitStartTime >= TIMED_SEQUENCE_WAIT_TIME) {
-    setTargetPosition((timedSequenceStep == 5) ? 1 : timedSequenceStep);
-    timedSequenceStep++;
+  // เช็คว่าเสร็จแล้วหรือยัง
+  if (timedSequenceStep > 5) {
+    Serial.println("Sequence completed");
+    timedSequenceStep = 0;
     timedSequenceWaitStartTime = 0;
+    return;
+  }
+
+  // รอ 5 วินาทีหลังจากเคลื่อนที่ครั้งก่อน แล้วไปจุดถัดไป
+  if (millis() - timedSequenceWaitStartTime >= TIMED_SEQUENCE_WAIT_TIME) {
+    // ไป Position 2, 3, 4 แล้วกลับ 1
+    if (timedSequenceStep == 2) setTargetPosition(2);
+    else if (timedSequenceStep == 3) setTargetPosition(3);
+    else if (timedSequenceStep == 4) setTargetPosition(4);
+    else if (timedSequenceStep == 5) setTargetPosition(1);
+
+    timedSequenceStep = timedSequenceStep + 1;
+    timedSequenceWaitStartTime = millis();  // เริ่มนับเวลารอใหม่
   }
 }
 
@@ -115,27 +170,30 @@ void processSerialCommand(String cmd) {
   cmd.trim();
 
   if (cmd.startsWith("COLOR:")) {
+    // รับข้อมูลสี: COLOR:yellow,green,purple,yellowCount,greenCount,purpleCount
     String data = cmd.substring(6);
     int idx1 = data.indexOf(',');
     int idx2 = data.indexOf(',', idx1 + 1);
     int idx3 = data.indexOf(',', idx2 + 1);
+    int idx4 = data.indexOf(',', idx3 + 1);
+    int idx5 = data.indexOf(',', idx4 + 1);
 
-    if (idx1 != -1 && idx2 != -1 && idx3 != -1) {
+    if (idx1 != -1 && idx2 != -1 && idx3 != -1 && idx4 != -1 && idx5 != -1) {
       yellowDetected = data.substring(0, idx1).toInt() == 1;
       greenDetected = data.substring(idx1 + 1, idx2).toInt() == 1;
-      yellowCount = data.substring(idx2 + 1, idx3).toInt();
-      greenCount = data.substring(idx3 + 1).toInt();
+      // purple ไม่ได้ใช้ในการควบคุม แต่รับไว้
+      int purpleVal = data.substring(idx2 + 1, idx3).toInt();
+      yellowCount = data.substring(idx3 + 1, idx4).toInt();
+      greenCount = data.substring(idx4 + 1, idx5).toInt();
+      // purpleCount ไม่ได้ใช้ แต่รับไว้
+      int purpleCount = data.substring(idx5 + 1).toInt();
+
       lastColorReceived = millis();
       serialConnected = true;
       Serial.println("ACK:COLOR_RECEIVED");
 
-      // Auto movement based on color
-      if (currentMode == AUTO_SEQUENCE && currentMoveState == IDLE) {
-        if (yellowDetected && !greenDetected) setTargetPosition(2);
-        else if (!yellowDetected && greenDetected) setTargetPosition(3);
-        else if (yellowDetected && greenDetected) setTargetPosition(4);
-        else setTargetPosition(1);
-      }
+      // สีไม่มีส่วนในการควบคุมการเคลื่อนที่
+      // ใช้เพื่อบันทึกสภาพพืชเท่านั้น
     } else {
       Serial.println("ERROR:INVALID_COLOR_FORMAT");
     }
@@ -147,10 +205,39 @@ void processSerialCommand(String cmd) {
   else if (cmd == "STATUS") {
     Serial.print("STATUS:X="); Serial.print(encoderValue_X);
     Serial.print(",Y="); Serial.print(encoderValue_Y);
-    Serial.print(",MODE="); Serial.print(currentMode == AUTO_SEQUENCE ? "AUTO" : "MANUAL");
-    Serial.print(",MOVING="); Serial.print(currentMoveState != IDLE ? "YES" : "NO");
-    Serial.print(",YELLOW="); Serial.print(yellowDetected ? "YES" : "NO");
-    Serial.print(",GREEN="); Serial.print(greenDetected ? "YES" : "NO");
+
+    // โหมด
+    Serial.print(",MODE=");
+    if (currentMode == AUTO_SEQUENCE) {
+      Serial.print("AUTO");
+    } else {
+      Serial.print("MANUAL");
+    }
+
+    // กำลังเคลื่อนที่หรือไม่
+    Serial.print(",MOVING=");
+    if (currentMoveState != IDLE) {
+      Serial.print("YES");
+    } else {
+      Serial.print("NO");
+    }
+
+    // สีเหลือง
+    Serial.print(",YELLOW=");
+    if (yellowDetected) {
+      Serial.print("YES");
+    } else {
+      Serial.print("NO");
+    }
+
+    // สีเขียว
+    Serial.print(",GREEN=");
+    if (greenDetected) {
+      Serial.print("YES");
+    } else {
+      Serial.print("NO");
+    }
+
     Serial.print(",YC="); Serial.print(yellowCount);
     Serial.print(",GC="); Serial.println(greenCount);
   }
@@ -216,6 +303,16 @@ void processSerialCommand(String cmd) {
     encoderValue_X = 0;
     encoderValue_Y = 0;
     Serial.println("ACK:RESET");
+  }
+  else if (cmd == "START_SEQUENCE") {
+    // เริ่ม sequence (เมื่อถึงเวลาที่ตั้ง)
+    if (currentMode == AUTO_SEQUENCE) {
+      timedSequenceStep = 1;
+      timedSequenceWaitStartTime = 0;
+      Serial.println("ACK:SEQUENCE_STARTED");
+    } else {
+      Serial.println("ERROR:NOT_IN_AUTO_MODE");
+    }
   }
   else {
     Serial.println("ERROR:UNKNOWN_COMMAND");

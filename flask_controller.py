@@ -147,25 +147,22 @@ class Camera:
         self.brown = (self.brown_count > 0)
 
         # --- วิเคราะห์สถานะพืช ---
-        # ถ้าเจอเฉพาะสีน้ำตาล = ขาดโพแทสเซียม
-        if self.brown and not self.green and not self.yellow and not self.purple:
-            self.plant_status = "ขาดโพแทสเซียม"
+        # ถ้าเจอสีที่แสดงการขาดธาตุ (ไม่สนใจว่ามีสีเขียวหรือไม่)
+        deficiencies = []
+        if self.yellow:
+            deficiencies.append("ไนโตรเจน")
+        if self.purple:
+            deficiencies.append("ฟอสฟอรัส")
+        if self.brown:
+            deficiencies.append("โพแทสเซียม")
 
-        # ถ้าเจอเฉพาะสีเหลือง = ขาดไนโตรเจน
-        elif self.yellow and not self.green and not self.purple and not self.brown:
-            self.plant_status = "ขาดไนโตรเจน"
-
-        # ถ้าเจอเฉพาะสีม่วง = ขาดฟอสฟอรัส
-        elif self.purple and not self.green and not self.yellow and not self.brown:
-            self.plant_status = "ขาดฟอสฟอรัส"
+        # ถ้าขาดธาตุอย่างใดอย่างหนึ่ง
+        if len(deficiencies) > 0:
+            self.plant_status = "ขาด" + "+".join(deficiencies)
 
         # ถ้าเจอเฉพาะสีเขียว = พืชปกติ
-        elif self.green and not self.yellow and not self.purple and not self.brown:
-            self.plant_status = "พืชปกติ"
-
-        # ถ้าเจอสีเขียวปนกับสีอื่น = พืชปกติบางส่วน
         elif self.green:
-            self.plant_status = "พืชปกติบางส่วน มีอาการขาดธาตุบางส่วน"
+            self.plant_status = "พืชปกติ"
 
         # ถ้าไม่เจออะไร = ไม่พบพืช
         else:
@@ -369,37 +366,27 @@ class DataLogger:
 
     def analyze_plant_status(self):
         """วิเคราะห์สถานะธาตุอาหารของพืช"""
-        green = camera.green_count
         yellow = camera.yellow_count
         purple = camera.purple_count
         brown = camera.brown_count
+        green = camera.green_count
 
-        # กรณีเจอเฉพาะสีเขียว = ปกติ
-        if green > 0 and yellow == 0 and purple == 0 and brown == 0:
-            return "ปกติ"
+        # สร้างรายการธาตุที่ขาด (ไม่สนใจว่ามีสีเขียวหรือไม่)
+        deficiencies = []
+        if yellow > 0:
+            deficiencies.append("ไนโตรเจน")
+        if purple > 0:
+            deficiencies.append("ฟอสฟอรัส")
+        if brown > 0:
+            deficiencies.append("โพแทสเซียม")
 
-        # กรณีเจอเฉพาะสีเหลือง = ขาดไนโตรเจน
-        elif yellow > 0 and green == 0 and purple == 0 and brown == 0:
-            return "ขาดไนโตรเจน"
+        # ถ้าขาดธาตุอย่างใดอย่างหนึ่ง
+        if len(deficiencies) > 0:
+            return "ขาด" + "+".join(deficiencies)
 
-        # กรณีเจอเฉพาะสีม่วง = ขาดฟอสฟอรัส
-        elif purple > 0 and green == 0 and yellow == 0 and brown == 0:
-            return "ขาดฟอสฟอรัส"
-
-        # กรณีเจอเฉพาะสีน้ำตาล = ขาดโพแทสเซียม
-        elif brown > 0 and green == 0 and yellow == 0 and purple == 0:
-            return "ขาดโพแทสเซียม"
-
-        # กรณีเจอสีเขียวปนกับสีอื่น = ขาดธาตุหลายอย่าง
+        # ถ้าเจอเฉพาะสีเขียว = ปกติ
         elif green > 0:
-            deficiencies = []
-            if yellow > 0:
-                deficiencies.append("ไนโตรเจน")
-            if purple > 0:
-                deficiencies.append("ฟอสฟอรัส")
-            if brown > 0:
-                deficiencies.append("โพแทสเซียม")
-            return "ปกติบางส่วน-ขาด" + "+".join(deficiencies)
+            return "ปกติ"
 
         # ไม่เจอพืช
         else:

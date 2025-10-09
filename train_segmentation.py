@@ -97,19 +97,21 @@ except Exception as e:
     print("  pip install ultralytics")
     exit()
 
-# ตรวจสอบว่ามี GPU หรือไม่
+# ตรวจสอบว่ามี GPU หรือไม่ (รองรับ CUDA และ MPS สำหรับ Mac)
 try:
     import torch
-    has_cuda = torch.cuda.is_available()
-    if has_cuda:
+    if torch.cuda.is_available():
         device = "0"
-        print("\n✓ พบ GPU: " + torch.cuda.get_device_name(0))
+        print("\n✓ พบ CUDA GPU: " + torch.cuda.get_device_name(0))
+    elif torch.backends.mps.is_available():
+        device = "mps"
+        print("\n✓ พบ Apple Silicon GPU (MPS)")
     else:
         device = "cpu"
         print("\n! ไม่พบ GPU - ใช้ CPU (จะช้ากว่า)")
 except:
     device = "cpu"
-    print("\n! ใช้ CPU (ไม่มี CUDA)")
+    print("\n! ใช้ CPU")
 
 # ===== ขั้นตอนที่ 3: เทรน Model =====
 print("\n" + "=" * 60)

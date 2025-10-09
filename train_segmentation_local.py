@@ -1,4 +1,4 @@
-# โค้ดสำหรับเทรน YOLOv8 Segmentation Model
+# โค้ดสำหรับเทรน YOLOv11 Segmentation Model
 # ใช้ Dataset ที่โหลดมาแล้ว (ไม่ต้องใช้ Roboflow API)
 
 # ขั้นตอนที่ 1: ติดตั้ง Library ที่จำเป็น
@@ -9,18 +9,18 @@ from ultralytics import YOLO
 import os
 
 print("=" * 60)
-print("YOLOv8 Segmentation Training (Local Dataset)")
+print("YOLOv11 Segmentation Training (Local Dataset)")
 print("=" * 60)
 
 # ===== ตั้งค่าพื้นฐาน =====
 # ระบุตำแหน่งไฟล์ data.yaml ของ Dataset ที่โหลดมาแล้ว
-DATASET_PATH = "dataset/data.yaml"  # เปลี่ยนเป็นตำแหน่งจริงของ data.yaml
+DATASET_PATH = "Test Leaf.v1i.yolov11/data.yaml"  # เปลี่ยนเป็นตำแหน่งจริงของ data.yaml
 
 # การตั้งค่าการเทรน
-EPOCHS = 100                    # จำนวนรอบการเทรน (แนะนำ 100-300)
+EPOCHS = 20                    # จำนวนรอบการเทรน (แนะนำ 100-300)
 IMAGE_SIZE = 640               # ขนาดภาพ (640 เป็นค่ามาตรฐาน)
-BATCH_SIZE = 16                # จำนวนภาพต่อรอบ (ลดถ้า RAM ไม่พอ)
-MODEL_SIZE = "yolov8n-seg.pt"  # ขนาด Model: n, s, m, l, x
+BATCH_SIZE = 32                # จำนวนภาพต่อรอบ (ลดถ้า RAM ไม่พอ)
+MODEL_SIZE = "yolo11n-seg.pt"  # ขนาด Model: n, s, m, l, x
 PATIENCE = 50                  # หยุดถ้าไม่ดีขึ้นใน 50 รอบ
 
 # ===== ขั้นตอนที่ 1: ตรวจสอบ Dataset =====
@@ -85,7 +85,7 @@ else:
 
 # ===== ขั้นตอนที่ 2: โหลด Model =====
 print("\n" + "=" * 60)
-print("ขั้นตอนที่ 2: โหลด Model YOLOv8")
+print("ขั้นตอนที่ 2: โหลด Model YOLOv11")
 print("=" * 60)
 
 try:
@@ -97,6 +97,22 @@ except Exception as e:
     print("  pip install ultralytics")
     exit()
 
+# ตรวจสอบว่ามี GPU หรือไม่ (รองรับ CUDA และ MPS สำหรับ Mac)
+try:
+    import torch
+    if torch.cuda.is_available():
+        device = "0"
+        print("\n✓ พบ CUDA GPU: " + torch.cuda.get_device_name(0))
+    elif torch.backends.mps.is_available():
+        device = "mps"
+        print("\n✓ พบ Apple Silicon GPU (MPS)")
+    else:
+        device = "cpu"
+        print("\n! ไม่พบ GPU - ใช้ CPU (จะช้ากว่า)")
+except:
+    device = "cpu"
+    print("\n! ใช้ CPU")
+
 # ===== ขั้นตอนที่ 3: เทรน Model =====
 print("\n" + "=" * 60)
 print("ขั้นตอนที่ 3: เริ่มเทรน Model")
@@ -106,6 +122,7 @@ print("จำนวนรอบ: " + str(EPOCHS))
 print("ขนาดภาพ: " + str(IMAGE_SIZE))
 print("Batch Size: " + str(BATCH_SIZE))
 print("Patience: " + str(PATIENCE))
+print("Device: " + device)
 print("\nกำลังเทรน... (อาจใช้เวลา 30 นาที - 2 ชั่วโมง)")
 print("=" * 60)
 
@@ -119,7 +136,7 @@ try:
         name="plant_segmentation",     # ชื่อการเทรนนี้
         patience=PATIENCE,             # หยุดถ้าไม่ดีขึ้น
         save=True,                     # บันทึก Model
-        device=0,                      # ใช้ GPU (ถ้าไม่มีจะใช้ CPU)
+        device=device,                 # ใช้ GPU หรือ CPU อัตโนมัติ
         project="runs/segment",        # โฟลเดอร์เก็บผลลัพธ์
         exist_ok=True                  # อนุญาตให้ทับโฟลเดอร์เดิม
     )

@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>ESP32 2-Axis Controller</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #f2f2f2;
+        margin: 0;
+        padding: 20px;
+        text-align: center;
+      }
+      .container {
+        max-width: 100%;
+        width: 100%;
+        margin: 0;
+        padding: 20px;
+        background: white;
+        box-sizing: border-box;
+      }
+      h1,
+      h2,
+      h3 {
+        color: #333;
+      }
+      .grid-container {
+        display: flex;
+        flex-direction: row;
+        gap: 20px;
+        margin-top: 20px;
+        overflow-x: auto;
+      }
+      .card {
+        background: #fafafa;
+        padding: 15px;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        flex: 1;
+        min-width: 0;
+      }
+      .data-display {
+        font-size: 1.2em;
+        color: #0056b3;
+        font-weight: bold;
+      }
+      .button {
+        color: white;
+        padding: 15px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 16px;
+        margin: 5px;
+        transition: background-color 0.2s;
+        user-select: none;
+      }
+      .button-mode {
+        background-color: #4caf50;
+      }
+      .button-x {
+        background-color: #2196f3;
+      }
+      .button-y {
+        background-color: #f44336;
+      }
+      .button-reset {
+        background-color: #ff9800;
+      }
+      .button-stop {
+        background-color: #d32f2f;
+        font-weight: bold;
+      }
+      .button-pos {
+        background-color: #0097a7;
+      }
+      .button-success {
+        background-color: #28a745;
+      }
+      .button-danger {
+        background-color: #dc3545;
+      }
+      .button:hover {
+        opacity: 0.8;
+      }
+      .button:active {
+        transform: scale(0.95);
+      }
+      .button.disabled {
+        background-color: #bdbdbd;
+        cursor: not-allowed;
+        opacity: 0.7;
+      }
+      hr {
+        border: 1px solid #eee;
+        margin: 15px 0;
+      }
+      .alarm-slot {
+        background-color: #f0f8ff;
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 15px;
+      }
+      .alarm-status {
+        font-size: 16px;
+        color: #333;
+        font-weight: bold;
+      }
+      .alarm-not-set {
+        color: #95a5a6;
+      }
+      .btn-set {
+        background-color: #16a085;
+      }
+      .btn-cancel {
+        background-color: #c0392b;
+      }
+      .status-detected {
+        color: #28a745;
+        font-weight: bold;
+      }
+      .status-not-detected {
+        color: #6c757d;
+      }
+      .camera-container {
+        position: relative;
+        display: inline-block;
+      }
+      .camera-overlay {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 5px;
+        border-radius: 3px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>ESP32 2-Axis Controller</h1>
+      <p>
+        <strong>Time:</strong> <span class="data-display" id="time">N/A</span>
+      </p>
+
+      <div class="grid-container">
+        <div class="card">
+          <h2>System Status & Control</h2>
+          <p>X Position: <span class="data-display" id="encoderX">0</span></p>
+          <p>Y Position: <span class="data-display" id="encoderY">0</span></p>
+          <hr />
+          <button
+            class="button button-stop"
+            onclick="sendCommand('/motor?dir=stop')"
+          >
+            STOP ALL
+          </button>
+          <button class="button button-reset" onclick="sendCommand('/reset')">
+            Reset Encoders
+          </button>
+        </div>
+
+        <div class="card">
+          <h2>Camera & Color Detection</h2>
+          <div style="text-align: center">
+            <img
+              id="camera_stream"
+              src="/video_feed"
+              style="
+                width: 100%;
+                max-width: 400px;
+                border: 2px solid #ddd;
+                border-radius: 5px;
+              "
+            />
+          </div>
+          <hr />
+          <div
+            style="display: flex; justify-content: space-around; margin: 10px 0"
+          >
+            <button
+              class="button"
+              style="background-color: #28a745"
+              onclick="controlCamera('start')"
+            >
+              เปิดกล้อง
+            </button>
+            <button
+              class="button"
+              style="background-color: #dc3545"
+              onclick="controlCamera('stop')"
+            >
+              ปิดกล้อง
+            </button>
+          </div>
+          <div
+            style="
+              background-color: #f8f9fa;
+              padding: 10px;
+              border-radius: 5px;
+              margin-top: 10px;
+            "
+          >
+            <p>
+              <strong>สถานะกล้อง:</strong>
+              <span id="camera_status" class="data-display"
+                >ไม่พร้อมใช้งาน</span
+              >
+            </p>
+            <p
+              style="
+                background: #fff3cd;
+                padding: 10px;
+                border-radius: 5px;
+                margin: 10px 0;
+              "
+            >
+              <strong>🌱 สภาพพืช:</strong>
+              <span id="plant_status" class="data-display" style="color: #333"
+                >ไม่พบพืช</span
+              >
+            </p>
+            <p>
+              <strong>สีเหลือง:</strong>
+              <span id="yellow_status" class="data-display">ไม่พบ</span> (<span
+                id="yellow_count"
+                >0</span
+              >
+              จุด)
+            </p>
+            <p>
+              <strong>สีเขียว:</strong>
+              <span id="green_status" class="data-display">ไม่พบ</span> (<span
+                id="green_count"
+                >0</span
+              >
+              จุด)
+            </p>
+            <p>
+              <strong>สีม่วง:</strong>
+              <span id="purple_status" class="data-display">ไม่พบ</span> (<span
+                id="purple_count"
+                >0</span
+              >
+              จุด)
+            </p>
+            <p>
+              <strong>สีน้ำตาล:</strong>
+              <span id="brown_status" class="data-display">ไม่พบ</span> (<span
+                id="brown_count"
+                >0</span
+              >
+              จุด)
+            </p>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Arduino Control</h2>
+          <div
+            style="
+              background-color: #f8f9fa;
+              padding: 10px;
+              border-radius: 5px;
+              margin-bottom: 10px;
+            "
+          >
+            <p>
+              <strong>สถานะ Arduino:</strong>
+              <span id="arduino_status" class="data-display">ไม่เชื่อมต่อ</span>
+            </p>
+            <p>
+              <strong>Port:</strong>
+              <span id="arduino_port" class="data-display">-</span>
+            </p>
+          </div>
+          <div style="margin-bottom: 10px">
+            <label><strong>เลือก COM Port:</strong></label>
+            <select
+              id="port_select"
+              style="
+                padding: 8px;
+                margin: 5px;
+                border-radius: 5px;
+                font-size: 14px;
+                width: 100%;
+              "
+            >
+              <option value="">ค้นหาอัตโนมัติ</option>
+            </select>
+          </div>
+          <div
+            style="display: flex; justify-content: space-around; margin: 10px 0"
+          >
+            <button
+              class="button"
+              style="background-color: #28a745"
+              onclick="connectArduino()"
+            >
+              Connect
+            </button>
+            <button
+              class="button"
+              style="background-color: #dc3545"
+              onclick="disconnectArduino()"
+            >
+              Disconnect
+            </button>
+            <button
+              class="button"
+              style="background-color: #17a2b8"
+              onclick="loadPorts()"
+            >
+              Refresh Ports
+            </button>
+          </div>
+          <hr />
+          <h3>ควบคุมมอเตอร์ผ่าน Arduino</h3>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 5px;
+              margin: 10px 0;
+            "
+          >
+            <button class="button button-x" onclick="controlArduino('X_FWD')">
+              X Forward
+            </button>
+            <button class="button button-x" onclick="controlArduino('X_BACK')">
+              X Backward
+            </button>
+            <button class="button button-y" onclick="controlArduino('Y_FWD')">
+              Y Forward
+            </button>
+            <button class="button button-y" onclick="controlArduino('Y_BACK')">
+              Y Backward
+            </button>
+          </div>
+          <button
+            class="button button-stop"
+            onclick="controlArduino('STOP')"
+            style="width: 100%"
+          >
+            STOP (Arduino)
+          </button>
+        </div>
+
+        <div class="card">
+          <h2>Operation Mode</h2>
+          <button
+            class="button button-mode"
+            id="btn-manual"
+            onclick="setMode('manual')"
+          >
+            Manual
+          </button>
+          <button
+            class="button button-mode"
+            id="btn-auto"
+            onclick="setMode('auto_sequence')"
+          >
+            Auto Sequence
+          </button>
+
+          <div id="manual-panel" style="display: none">
+            <hr />
+            <h3>Manual Jog</h3>
+            <button
+              class="button button-x"
+              onmousedown="sendCommand('/motor?dir=xfwd')"
+              onmouseup="sendCommand('/motor?dir=stop')"
+            >
+              Forward X
+            </button>
+            <button
+              class="button button-x"
+              onmousedown="sendCommand('/motor?dir=xback')"
+              onmouseup="sendCommand('/motor?dir=stop')"
+            >
+              Backward X
+            </button>
+            <br />
+            <button
+              class="button button-y"
+              onmousedown="sendCommand('/motor?dir=yfwd')"
+              onmouseup="sendCommand('/motor?dir=stop')"
+            >
+              Forward Y
+            </button>
+            <button
+              class="button button-y"
+              onmousedown="sendCommand('/motor?dir=yback')"
+              onmouseup="sendCommand('/motor?dir=stop')"
+            >
+              Backward Y
+            </button>
+            <hr />
+            <h3>Go To Position</h3>
+            <button
+              class="button button-pos control-btn"
+              onclick="sendCommand('/moveto?pos=1')"
+            >
+              GO TO POS 1 (HOME)
+            </button>
+            <button
+              class="button button-pos control-btn"
+              onclick="sendCommand('/moveto?pos=2')"
+            >
+              GO TO POS 2
+            </button>
+            <br />
+            <button
+              class="button button-pos control-btn"
+              onclick="sendCommand('/moveto?pos=3')"
+            >
+              GO TO POS 3
+            </button>
+            <button
+              class="button button-pos control-btn"
+              onclick="sendCommand('/moveto?pos=4')"
+            >
+              GO TO POS 4
+            </button>
+            <hr />
+            <h3>ปั๊มน้ำ (Manual)</h3>
+            <p>ตั้งเวลาปั๊มน้ำ (วินาที):</p>
+            <input
+              type="number"
+              id="pump-duration"
+              value="5"
+              min="1"
+              max="60"
+              style="padding: 10px; font-size: 1em; margin: 5px"
+            />
+            <button class="button button-success" onclick="setPumpDuration()">
+              ตั้งเวลา
+            </button>
+            <br /><br />
+            <button
+              class="button button-success"
+              onclick="sendCommand('/pump?action=on')"
+            >
+              เปิดปั๊มน้ำ
+            </button>
+            <button
+              class="button button-danger"
+              onclick="sendCommand('/pump?action=off')"
+            >
+              ปิดปั๊มน้ำ
+            </button>
+          </div>
+
+          <div id="auto-panel" style="display: none">
+            <hr />
+            <h3>Auto Sequence Status</h3>
+            <p>
+              Status:
+              <span id="auto_status" class="data-display"
+                >IDLE (Waiting for Time)</span
+              >
+            </p>
+            <hr />
+            <h3>ตั้งเวลาปั๊มน้ำ (Auto)</h3>
+            <p>ระยะเวลาเปิดปั๊มในแต่ละตำแหน่ง (วินาที):</p>
+            <input
+              type="number"
+              id="pump-duration-auto"
+              value="5"
+              min="1"
+              max="60"
+              style="padding: 10px; font-size: 1em; margin: 5px"
+            />
+            <button
+              class="button button-success"
+              onclick="setPumpDurationAuto()"
+            >
+              ตั้งเวลา
+            </button>
+            <hr />
+            <h3>Timed Sequence Trigger</h3>
+            <p>ตั้งเวลาเริ่มทำงาน (จะทำงานเมื่ออยู่ในโหมด Auto)</p>
+            <div id="alarm-slots-container">
+              <div class="alarm-slot">
+                <p id="alarm-status-0" class="alarm-status alarm-not-set"></p>
+                <div id="alarm-set-form-0">
+                  <form
+                    action="/set-alarm"
+                    method="GET"
+                    onsubmit="event.preventDefault(); sendCommand(this.action + '?alarmTime=' + this.alarmTime.value + '&slot=' + this.slot.value);"
+                  >
+                    <input type="time" name="alarmTime" required />
+                    <input type="hidden" name="slot" value="0" />
+                    <button type="submit" class="button btn-set">
+                      ตั้งเวลา 1
+                    </button>
+                  </form>
+                </div>
+                <div id="alarm-cancel-form-0" style="display: none">
+                  <form
+                    action="/cancel-alarm"
+                    method="GET"
+                    onsubmit="event.preventDefault(); sendCommand(this.action + '?slot=' + this.slot.value);"
+                  >
+                    <input type="hidden" name="slot" value="0" />
+                    <button type="submit" class="button btn-cancel">
+                      ยกเลิก 1
+                    </button>
+                  </form>
+                </div>
+              </div>
+              <div class="alarm-slot">
+                <p id="alarm-status-1" class="alarm-status alarm-not-set"></p>
+                <div id="alarm-set-form-1">
+                  <form
+                    action="/set-alarm"
+                    method="GET"
+                    onsubmit="event.preventDefault(); sendCommand(this.action + '?alarmTime=' + this.alarmTime.value + '&slot=' + this.slot.value);"
+                  >
+                    <input type="time" name="alarmTime" required />
+                    <input type="hidden" name="slot" value="1" />
+                    <button type="submit" class="button btn-set">
+                      ตั้งเวลา 2
+                    </button>
+                  </form>
+                </div>
+                <div id="alarm-cancel-form-1" style="display: none">
+                  <form
+                    action="/cancel-alarm"
+                    method="GET"
+                    onsubmit="event.preventDefault(); sendCommand(this.action + '?slot=' + this.slot.value);"
+                  >
+                    <input type="hidden" name="slot" value="1" />
+                    <button type="submit" class="button btn-cancel">
+                      ยกเลิก 2
+                    </button>
+                  </form>
+                </div>
+              </div>
+              <div class="alarm-slot">
+                <p id="alarm-status-2" class="alarm-status alarm-not-set"></p>
+                <div id="alarm-set-form-2">
+                  <form
+                    action="/set-alarm"
+                    method="GET"
+                    onsubmit="event.preventDefault(); sendCommand(this.action + '?alarmTime=' + this.alarmTime.value + '&slot=' + this.slot.value);"
+                  >
+                    <input type="time" name="alarmTime" required />
+                    <input type="hidden" name="slot" value="2" />
+                    <button type="submit" class="button btn-set">
+                      ตั้งเวลา 3
+                    </button>
+                  </form>
+                </div>
+                <div id="alarm-cancel-form-2" style="display: none">
+                  <form
+                    action="/cancel-alarm"
+                    method="GET"
+                    onsubmit="event.preventDefault(); sendCommand(this.action + '?slot=' + this.slot.value);"
+                  >
+                    <input type="hidden" name="slot" value="2" />
+                    <button type="submit" class="button btn-cancel">
+                      ยกเลิก 3
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>📊 บันทึกข้อมูล CSV</h2>
+          <p>
+            <strong>สถานะไฟล์:</strong>
+            <span id="csv_filename" class="data-display">-</span>
+          </p>
+          <p>
+            <strong>จำนวนข้อมูล:</strong>
+            <span id="csv_records" class="data-display">0</span> รายการ
+          </p>
+          <p>
+            <strong>ขนาดไฟล์:</strong>
+            <span id="csv_size" class="data-display">0</span> bytes
+          </p>
+
+          <div style="margin: 15px 0">
+            <h3>บันทึกข้อมูลแบบ Manual</h3>
+            <input
+              type="text"
+              id="manual_position"
+              placeholder="ชื่อตำแหน่ง"
+              style="padding: 10px; margin: 5px; width: 200px"
+            />
+            <input
+              type="text"
+              id="manual_notes"
+              placeholder="หมายเหตุ"
+              style="padding: 10px; margin: 5px; width: 200px"
+            />
+            <button
+              class="button"
+              style="background-color: #17a2b8"
+              onclick="logManualData()"
+            >
+              บันทึกข้อมูล
+            </button>
+          </div>
+
+          <div
+            style="display: flex; justify-content: space-around; margin: 15px 0"
+          >
+            <button
+              class="button"
+              style="background-color: #28a745"
+              onclick="refreshCsvStatus()"
+            >
+              🔄 รีเฟรชสถานะ
+            </button>
+            <button
+              class="button"
+              style="background-color: #007bff"
+              onclick="downloadCsv()"
+            >
+              📥 ดาวน์โหลด CSV
+            </button>
+          </div>
+
+          <div
+            style="
+              margin-top: 15px;
+              padding: 10px;
+              background: #f8f9fa;
+              border-radius: 5px;
+            "
+          >
+            <small>
+              <strong>📋 รูปแบบข้อมูล CSV:</strong><br />
+              • เวลา, ตำแหน่ง X/Y, ชื่อตำแหน่ง<br />
+              • จำนวนสีเขียว/เหลือง/ม่วง/น้ำตาล<br />
+              • สถานะพืช, การวินิจฉัย, หมายเหตุ<br />
+              <em>ข้อมูลจะถูกบันทึกอัตโนมัติก่อนรดน้ำ</em>
+            </small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function sendCommand(url) {
+        fetch(url).then((response) => {
+          if (!response.ok) console.error("Command failed");
+        });
+      }
+
+      function setPumpDuration() {
+        const duration = document.getElementById("pump-duration").value;
+        sendCommand("/set-pump-duration?duration=" + duration);
+        alert("ตั้งเวลาปั๊ม " + duration + " วินาที");
+      }
+
+      function setPumpDurationAuto() {
+        const duration = document.getElementById("pump-duration-auto").value;
+        sendCommand("/set-pump-duration?duration=" + duration);
+        alert("ตั้งเวลาปั๊ม " + duration + " วินาที (สำหรับ Auto mode)");
+      }
+
+      function setMode(mode) {
+        sendCommand("/setmode?mode=" + mode);
+      }
+
+      function controlCamera(action) {
+        fetch(`/camera_control?action=${action}`)
+          .then((response) => response.json())
+          .then((data) => {
+            console.log(data.message);
+            updateCameraStatus();
+          })
+          .catch((error) => console.error("Camera control error:", error));
+      }
+
+      function controlArduino(action) {
+        fetch(`/arduino_control?action=${action}`)
+          .then((response) => response.json())
+          .then((data) => {
+            console.log(data.message);
+            if (data.arduino_status) {
+              console.log("Arduino Status:", data.arduino_status);
+            }
+            updateArduinoStatus();
+          })
+          .catch((error) => console.error("Arduino control error:", error));
+      }
+
+      function loadPorts() {
+        fetch("/arduino_control?action=get_ports")
+          .then((response) => response.json())
+          .then((data) => {
+            const select = document.getElementById("port_select");
+            select.innerHTML = '<option value="">ค้นหาอัตโนมัติ</option>';
+            if (data.ports && data.ports.length > 0) {
+              data.ports.forEach((port) => {
+                const option = document.createElement("option");
+                option.value = port;
+                option.innerText = port;
+                select.appendChild(option);
+              });
+            }
+          })
+          .catch((error) => console.error("Load ports error:", error));
+      }
+
+      function connectArduino() {
+        const port = document.getElementById("port_select").value;
+        const url = port
+          ? `/arduino_control?action=connect&port=${port}`
+          : "/arduino_control?action=connect";
+        fetch(url)
+          .then((response) => response.json())
+          .then((data) => {
+            console.log("Connect result:", data);
+            updateArduinoStatus();
+          })
+          .catch((error) => console.error("Connect error:", error));
+      }
+
+      function disconnectArduino() {
+        fetch("/arduino_control?action=disconnect")
+          .then((response) => response.json())
+          .then((data) => {
+            console.log("Disconnect result:", data);
+            updateArduinoStatus();
+          })
+          .catch((error) => console.error("Disconnect error:", error));
+      }
+
+      function updateArduinoStatus() {
+        fetch("/detection_data")
+          .then((response) => response.json())
+          .then((data) => {
+            // Update Arduino status
+            const arduinoStatus = document.getElementById("arduino_status");
+            const arduinoPort = document.getElementById("arduino_port");
+
+            if (data.arduino_connected) {
+              arduinoStatus.innerText = "เชื่อมต่อแล้ว";
+              arduinoStatus.className = "data-display status-detected";
+              arduinoPort.innerText = data.arduino_port || "-";
+            } else {
+              arduinoStatus.innerText = "ไม่เชื่อมต่อ";
+              arduinoStatus.className = "data-display status-not-detected";
+              arduinoPort.innerText = "-";
+            }
+          })
+          .catch((error) => console.error("Arduino status error:", error));
+      }
+
+      function updateCameraStatus() {
+        fetch("/detection_data")
+          .then((response) => response.json())
+          .then((data) => {
+            // Update camera status
+            const cameraStatus = document.getElementById("camera_status");
+            if (data.camera_enabled) {
+              cameraStatus.innerText = "พร้อมใช้งาน";
+              cameraStatus.className = "data-display status-detected";
+            } else {
+              cameraStatus.innerText = "ไม่พร้อมใช้งาน";
+              cameraStatus.className = "data-display status-not-detected";
+            }
+
+            // Update plant status
+            const plantStatus = document.getElementById("plant_status");
+            if (data.plant_status) {
+              plantStatus.innerText = data.plant_status;
+              if (data.plant_status === "พืชปกติ") {
+                plantStatus.style.color = "#28a745";
+              } else if (data.plant_status.includes("ขาด")) {
+                plantStatus.style.color = "#dc3545";
+              } else {
+                plantStatus.style.color = "#333";
+              }
+            }
+
+            // Update yellow detection
+            const yellowStatus = document.getElementById("yellow_status");
+            const yellowCount = document.getElementById("yellow_count");
+            if (data.yellow_detected) {
+              yellowStatus.innerText = "พบ";
+              yellowStatus.className = "data-display status-detected";
+            } else {
+              yellowStatus.innerText = "ไม่พบ";
+              yellowStatus.className = "data-display status-not-detected";
+            }
+            yellowCount.innerText = data.yellow_count;
+
+            // Update green detection
+            const greenStatus = document.getElementById("green_status");
+            const greenCount = document.getElementById("green_count");
+            if (data.green_detected) {
+              greenStatus.innerText = "พบ";
+              greenStatus.className = "data-display status-detected";
+            } else {
+              greenStatus.innerText = "ไม่พบ";
+              greenStatus.className = "data-display status-not-detected";
+            }
+            greenCount.innerText = data.green_count;
+
+            // Update purple detection
+            const purpleStatus = document.getElementById("purple_status");
+            const purpleCount = document.getElementById("purple_count");
+            if (data.purple_detected) {
+              purpleStatus.innerText = "พบ";
+              purpleStatus.className = "data-display status-detected";
+            } else {
+              purpleStatus.innerText = "ไม่พบ";
+              purpleStatus.className = "data-display status-not-detected";
+            }
+            purpleCount.innerText = data.purple_count;
+
+            // Update brown detection
+            const brownStatus = document.getElementById("brown_status");
+            const brownCount = document.getElementById("brown_count");
+            if (data.brown_detected) {
+              brownStatus.innerText = "พบ";
+              brownStatus.className = "data-display status-detected";
+            } else {
+              brownStatus.innerText = "ไม่พบ";
+              brownStatus.className = "data-display status-not-detected";
+            }
+            brownCount.innerText = data.brown_count;
+
+            // Update Arduino status
+            const arduinoStatus = document.getElementById("arduino_status");
+            const arduinoPort = document.getElementById("arduino_port");
+
+            if (data.arduino_connected) {
+              arduinoStatus.innerText = "เชื่อมต่อแล้ว";
+              arduinoStatus.className = "data-display status-detected";
+              arduinoPort.innerText = data.arduino_port || "-";
+            } else {
+              arduinoStatus.innerText = "ไม่เชื่อมต่อ";
+              arduinoStatus.className = "data-display status-not-detected";
+              arduinoPort.innerText = "-";
+            }
+          })
+          .catch((error) => console.error("Detection data error:", error));
+      }
+
+      function updateData() {
+        fetch("/data")
+          .then((response) => response.json())
+          .then((data) => {
+            document.getElementById("encoderX").innerText = data.encoderX;
+            document.getElementById("encoderY").innerText = data.encoderY;
+            document.getElementById("time").innerText = data.time;
+
+            // Update camera and detection data
+            if (data.camera_enabled !== undefined) {
+              const cameraStatus = document.getElementById("camera_status");
+              if (data.camera_enabled) {
+                cameraStatus.innerText = "พร้อมใช้งาน";
+                cameraStatus.className = "data-display status-detected";
+              } else {
+                cameraStatus.innerText = "ไม่พร้อมใช้งาน";
+                cameraStatus.className = "data-display status-not-detected";
+              }
+
+              // Update detection results
+              const yellowStatus = document.getElementById("yellow_status");
+              const yellowCount = document.getElementById("yellow_count");
+              const greenStatus = document.getElementById("green_status");
+              const greenCount = document.getElementById("green_count");
+
+              if (data.yellow_detected) {
+                yellowStatus.innerText = "พบ";
+                yellowStatus.className = "data-display status-detected";
+              } else {
+                yellowStatus.innerText = "ไม่พบ";
+                yellowStatus.className = "data-display status-not-detected";
+              }
+
+              if (data.green_detected) {
+                greenStatus.innerText = "พบ";
+                greenStatus.className = "data-display status-detected";
+              } else {
+                greenStatus.innerText = "ไม่พบ";
+                greenStatus.className = "data-display status-not-detected";
+              }
+
+              // Update purple detection
+              const purpleStatus = document.getElementById("purple_status");
+              const purpleCount = document.getElementById("purple_count");
+              if (data.purple_detected) {
+                purpleStatus.innerText = "พบ";
+                purpleStatus.className = "data-display status-detected";
+              } else {
+                purpleStatus.innerText = "ไม่พบ";
+                purpleStatus.className = "data-display status-not-detected";
+              }
+
+              yellowCount.innerText = data.detection_results
+                ? data.detection_results.yellow_count
+                : 0;
+              greenCount.innerText = data.detection_results
+                ? data.detection_results.green_count
+                : 0;
+              purpleCount.innerText = data.detection_results
+                ? data.detection_results.purple_count
+                : 0;
+
+              // Update brown count
+              const brownCount = document.getElementById("brown_count");
+              brownCount.innerText = data.detection_results
+                ? data.detection_results.brown_count
+                : 0;
+
+              // Update plant status in main data
+              const plantStatus = document.getElementById("plant_status");
+              if (data.plant_status) {
+                plantStatus.innerText = data.plant_status;
+                if (data.plant_status === "พืชปกติ") {
+                  plantStatus.style.color = "#28a745";
+                } else if (data.plant_status.includes("ขาด")) {
+                  plantStatus.style.color = "#dc3545";
+                } else {
+                  plantStatus.style.color = "#333";
+                }
+              }
+            }
+
+            const isMoving = data.isMoving;
+            const mode = data.mode;
+            const manualPanel = document.getElementById("manual-panel");
+            const autoPanel = document.getElementById("auto-panel");
+            const btnManual = document.getElementById("btn-manual");
+            const btnAuto = document.getElementById("btn-auto");
+
+            if (mode === "auto_sequence") {
+              manualPanel.style.display = "none";
+              autoPanel.style.display = "block";
+              btnAuto.classList.add("disabled");
+              btnManual.classList.remove("disabled");
+
+              let statusText = "IDLE (Waiting for Time)";
+              if (data.timedSequenceStep > 0) {
+                let currentStep = data.timedSequenceStep - 1;
+                if (isMoving) {
+                  statusText =
+                    "TIMED: Moving to Pos " +
+                    (currentStep == 5 ? 1 : currentStep);
+                } else {
+                  statusText =
+                    "TIMED: Waiting at Pos " +
+                    (currentStep > 5 ? 1 : currentStep);
+                }
+              }
+              document.getElementById("auto_status").innerText = statusText;
+            } else {
+              // manual
+              manualPanel.style.display = "block";
+              autoPanel.style.display = "none";
+              btnManual.classList.add("disabled");
+              btnAuto.classList.remove("disabled");
+            }
+
+            const manualBtns = manualPanel.querySelectorAll(".control-btn");
+            if (isMoving) {
+              manualBtns.forEach((btn) => btn.classList.add("disabled"));
+            } else {
+              manualBtns.forEach((btn) => btn.classList.remove("disabled"));
+            }
+
+            data.alarms.forEach((alarm, index) => {
+              const statusEl = document.getElementById(`alarm-status-${index}`);
+              const setFormEl = document.getElementById(
+                `alarm-set-form-${index}`
+              );
+              const cancelFormEl = document.getElementById(
+                `alarm-cancel-form-${index}`
+              );
+
+              if (alarm.isEnabled) {
+                statusEl.innerHTML = `เวลาที่ ${
+                  index + 1
+                }: ⏰ ตั้งไว้ที่ <strong>${alarm.time}</strong>`;
+                statusEl.classList.remove("alarm-not-set");
+                setFormEl.style.display = "none";
+                cancelFormEl.style.display = "block";
+              } else {
+                statusEl.innerHTML = `เวลาที่ ${index + 1}: ยังไม่ได้ตั้งค่า`;
+                statusEl.classList.add("alarm-not-set");
+                setFormEl.style.display = "block";
+                cancelFormEl.style.display = "none";
+              }
+            });
+          });
+      }
+
+      // === CSV Functions ===
+      function logManualData() {
+        const position =
+          document.getElementById("manual_position").value || "Manual";
+        const notes = document.getElementById("manual_notes").value || "";
+
+        const url = `/log_data?position=${encodeURIComponent(
+          position
+        )}&notes=${encodeURIComponent(notes)}`;
+
+        fetch(url)
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.status === "success") {
+              alert(`บันทึกข้อมูลสำเร็จ: ${position}`);
+              document.getElementById("manual_position").value = "";
+              document.getElementById("manual_notes").value = "";
+              refreshCsvStatus();
+            } else {
+              alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+            }
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+            alert("เกิดข้อผิดพลาดในการเชื่อมต่อ");
+          });
+      }
+
+      function refreshCsvStatus() {
+        fetch("/csv_status")
+          .then((response) => response.json())
+          .then((data) => {
+            document.getElementById("csv_filename").innerText =
+              data.filename || "-";
+            document.getElementById("csv_records").innerText =
+              data.record_count || 0;
+            document.getElementById("csv_size").innerText = data.file_size || 0;
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+          });
+      }
+
+      function downloadCsv() {
+        window.location.href = "/download_csv";
+      }
+
+      setInterval(updateData, 500);
+      window.onload = function () {
+        updateData();
+        loadPorts();
+        refreshCsvStatus(); // โหลดสถานะ CSV เมื่อเริ่มต้น
+      };
+    </script>
+  </body>
+</html>

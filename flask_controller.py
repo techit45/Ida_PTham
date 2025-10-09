@@ -39,76 +39,100 @@ class Camera:
         return False
 
     def get_frame(self):
-        if not self.cam or not self.cam.isOpened():
+        if not self.cam:
+            return None
+        if not self.cam.isOpened():
             return None
 
         ret, frame = self.cam.read()
         if not ret:
             return None
 
-        # แปลงเป็น HSV
+        # แปลงเป็นสี HSV
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-        # หาสี 3 แบบ (เพิ่ม Saturation และ Value ขั้นต่ำ เพื่อไม่เจอสีเข้ม/ดำ)
-        yellow_mask = cv2.inRange(hsv, np.array([20, 80, 80]), np.array([30, 255, 255]))
-        green_mask = cv2.inRange(hsv, np.array([40, 60, 60]), np.array([80, 255, 255]))
-        purple_mask = cv2.inRange(hsv, np.array([125, 80, 80]), np.array([155, 255, 255]))
-
+        # หาสีเหลือง
+        yellow_low = np.array([20, 80, 80])
+        yellow_high = np.array([30, 255, 255])
+        yellow_mask = cv2.inRange(hsv, yellow_low, yellow_high)
         yellow_contours, _ = cv2.findContours(yellow_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # หาสีเขียว
+        green_low = np.array([40, 60, 60])
+        green_high = np.array([80, 255, 255])
+        green_mask = cv2.inRange(hsv, green_low, green_high)
         green_contours, _ = cv2.findContours(green_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # หาสีม่วง
+        purple_low = np.array([125, 80, 80])
+        purple_high = np.array([155, 255, 255])
+        purple_mask = cv2.inRange(hsv, purple_low, purple_high)
         purple_contours, _ = cv2.findContours(purple_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
+        # นับสีเหลือง
         self.yellow_count = 0
-        self.green_count = 0
-        self.purple_count = 0
-
-        # วาดกรอบสีเหลือง
         for c in yellow_contours:
-            if cv2.contourArea(c) > 500:
-                self.yellow_count += 1
+            area = cv2.contourArea(c)
+            if area > 500:
+                self.yellow_count = self.yellow_count + 1
                 x, y, w, h = cv2.boundingRect(c)
                 cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 255), 2)
                 cv2.putText(frame, 'YELLOW', (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
-        # วาดกรอบสีเขียว
+        # นับสีเขียว
+        self.green_count = 0
         for c in green_contours:
-            if cv2.contourArea(c) > 500:
-                self.green_count += 1
+            area = cv2.contourArea(c)
+            if area > 500:
+                self.green_count = self.green_count + 1
                 x, y, w, h = cv2.boundingRect(c)
                 cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
                 cv2.putText(frame, 'GREEN', (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
-        # วาดกรอบสีม่วง
+        # นับสีม่วง
+        self.purple_count = 0
         for c in purple_contours:
-            if cv2.contourArea(c) > 500:
-                self.purple_count += 1
+            area = cv2.contourArea(c)
+            if area > 500:
+                self.purple_count = self.purple_count + 1
                 x, y, w, h = cv2.boundingRect(c)
                 cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 255), 2)
                 cv2.putText(frame, 'PURPLE', (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
 
-        self.yellow = self.yellow_count > 0
-        self.green = self.green_count > 0
-        self.purple = self.purple_count > 0
+        # เช็คว่าพบสีหรือไม่
+        if self.yellow_count > 0:
+            self.yellow = True
+        else:
+            self.yellow = False
 
-        # ตรวจสอบสภาพพืช
-        if self.yellow and not self.green and not self.purple:
+        if self.green_count > 0:
+            self.green = True
+        else:
+            self.green = False
+
+        if self.purple_count > 0:
+            self.purple = True
+        else:
+            self.purple = False
+
+        # ดูสภาพพืช
+        if self.yellow == True and self.green == False and self.purple == False:
             self.plant_status = "ขาดไนโตรเจน"
-        elif self.purple and not self.green and not self.yellow:
+        elif self.purple == True and self.green == False and self.yellow == False:
             self.plant_status = "ขาดฟอสฟอรัส"
-        elif self.yellow and self.purple:
+        elif self.yellow == True and self.purple == True:
             self.plant_status = "ขาดไนโตรเจนและฟอสฟอรัส"
-        elif self.green and not self.yellow and not self.purple:
+        elif self.green == True and self.yellow == False and self.purple == False:
             self.plant_status = "พืชปกติ"
-        elif self.green and (self.yellow or self.purple):
+        elif self.green == True:
             self.plant_status = "พืชปกติบางส่วน มีอาการขาดธาตุบางส่วน"
         else:
             self.plant_status = "ไม่พบพืช"
 
-        # แสดงสถานะ
-        cv2.putText(frame, f"Y:{self.yellow_count} G:{self.green_count} P:{self.purple_count}", (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(frame, self.plant_status, (10, 60),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        # เขียนข้อความบนภาพ
+        text1 = "Y:" + str(self.yellow_count) + " G:" + str(self.green_count) + " P:" + str(self.purple_count)
+        cv2.putText(frame, text1, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        cv2.putText(frame, self.plant_status, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
         return frame
 
@@ -137,17 +161,16 @@ class Arduino:
         return ports
 
     def connect(self, port=None):
-        # เชื่อมต่อ Arduino
+        # เตรียม port ที่จะลอง
         if port:
-            # ใช้ port ที่เลือก
             ports = [port]
         else:
-            # หาอัตโนมัติ
             ports = self.get_ports()
 
+        # ลองเชื่อมต่อแต่ละ port
         for p in ports:
             try:
-                print(f"กำลังเชื่อมต่อ {p}...")
+                print("กำลังเชื่อมต่อ " + p + "...")
 
                 # เปิด port
                 self.ser = serial.Serial(p, 115200, timeout=1)
@@ -156,75 +179,74 @@ class Arduino:
                 # ลบข้อมูลเก่า
                 self.ser.reset_input_buffer()
                 self.ser.reset_output_buffer()
-                time.sleep(0.5)
 
-                # ส่ง PING
-                self.ser.write(b"PING\n")
-                time.sleep(0.5)
+                # ลอง PING 2 ครั้ง
+                success = False
+                for i in range(2):
+                    self.ser.write(b"PING\n")
+                    time.sleep(0.5)
 
-                # อ่าน response
-                if self.ser.in_waiting > 0:
-                    data = self.ser.readline()
-                    response = data.decode('utf-8', errors='ignore').strip()
-                    print(f"ได้: {response}")
+                    # ดูว่ามีข้อมูลกลับมาไหม
+                    if self.ser.in_waiting > 0:
+                        data = self.ser.readline()
+                        response = data.decode('utf-8', errors='ignore').strip()
+                        print("ได้: " + response)
 
-                    if "PONG" in response:
-                        self.connected = True
-                        self.port = p
-                        print(f"เชื่อมต่อสำเร็จ: {p}")
-                        # เริ่ม thread อ่านข้อมูล
-                        self.reading = True
-                        threading.Thread(target=self.read_loop, daemon=True).start()
-                        return True
+                        # ถ้าได้ PONG กลับมา
+                        if "PONG" in response:
+                            self.connected = True
+                            self.port = p
+                            self.reading = True
 
-                # ลองอีกครั้ง
-                self.ser.write(b"PING\n")
-                time.sleep(0.5)
+                            # เริ่ม thread อ่านข้อมูล
+                            t = threading.Thread(target=self.read_loop, daemon=True)
+                            t.start()
 
-                if self.ser.in_waiting > 0:
-                    data = self.ser.readline()
-                    response = data.decode('utf-8', errors='ignore').strip()
-                    print(f"ได้: {response}")
+                            print("เชื่อมต่อสำเร็จ: " + p)
+                            success = True
+                            break
 
-                    if "PONG" in response:
-                        self.connected = True
-                        self.port = p
-                        print(f"เชื่อมต่อสำเร็จ: {p}")
-                        # เริ่ม thread อ่านข้อมูล
-                        self.reading = True
-                        threading.Thread(target=self.read_loop, daemon=True).start()
-                        return True
-
-                print(f"ไม่ได้รับ PONG จาก {p}")
-                self.ser.close()
+                if success:
+                    return True
+                else:
+                    self.ser.close()
 
             except Exception as e:
-                print(f"ผิดพลาด: {e}")
-                if self.ser:
-                    try:
-                        self.ser.close()
-                    except:
-                        pass
+                print("ผิดพลาด: " + str(e))
+                try:
+                    self.ser.close()
+                except:
+                    pass
 
         print("หา Arduino ไม่เจอ")
         return False
 
     def read_loop(self):
         # อ่านข้อมูลจาก Arduino ตลอดเวลา
-        while self.reading and self.connected:
+        while self.reading == True and self.connected == True:
             try:
+                # ถ้ามีข้อมูล
                 if self.ser and self.ser.in_waiting > 0:
+                    # อ่านข้อมูล
                     line = self.ser.readline()
                     data = line.decode('utf-8', errors='ignore').strip()
 
-                    # แยกข้อมูล STATUS
+                    # ถ้าเป็นข้อมูล STATUS
                     if data.startswith("STATUS:"):
-                        parts = data.replace("STATUS:", "").split(",")
+                        # ตัดคำว่า STATUS: ออก
+                        data = data.replace("STATUS:", "")
+
+                        # แยกด้วย ,
+                        parts = data.split(",")
+
+                        # หาค่า X และ Y
                         for part in parts:
                             if "X=" in part:
-                                self.encoder_x = int(part.split("=")[1])
+                                value = part.split("=")[1]
+                                self.encoder_x = int(value)
                             elif "Y=" in part:
-                                self.encoder_y = int(part.split("=")[1])
+                                value = part.split("=")[1]
+                                self.encoder_y = int(value)
 
                 time.sleep(0.1)
             except:
@@ -318,44 +340,42 @@ def cam_ctrl():
         return jsonify({"status": "success"})
     return jsonify({"status": "error"})
 
+def start_status_loop():
+    def loop():
+        while arduino.connected:
+            arduino.send("STATUS\n")
+            time.sleep(1)
+    threading.Thread(target=loop, daemon=True).start()
+
 @app.route('/arduino_control')
 def ard_ctrl():
     action = request.args.get('action')
     port = request.args.get('port')
 
     if action == 'get_ports':
-        ports = arduino.get_ports()
-        return jsonify({"status": "success", "ports": ports})
-    elif action == 'connect':
+        return jsonify({"status": "success", "ports": arduino.get_ports()})
+
+    if action == 'connect':
         arduino.close()
         ok = arduino.connect(port)
         if ok:
-            # ขอ STATUS ทุก 1 วินาที
-            def request_status():
-                while arduino.connected:
-                    arduino.send("STATUS\n")
-                    time.sleep(1)
-            threading.Thread(target=request_status, daemon=True).start()
-        return jsonify({"status": "success" if ok else "error",
-                       "connected": ok, "port": arduino.port})
-    elif action == 'disconnect':
+            start_status_loop()
+        return jsonify({"status": "success" if ok else "error", "connected": ok, "port": arduino.port})
+
+    if action == 'disconnect':
         arduino.close()
         return jsonify({"status": "success", "connected": False, "port": None})
-    elif action == 'reconnect':
+
+    if action == 'reconnect':
         arduino.close()
         ok = arduino.connect()
         if ok:
-            # ขอ STATUS ทุก 1 วินาที
-            def request_status():
-                while arduino.connected:
-                    arduino.send("STATUS\n")
-                    time.sleep(1)
-            threading.Thread(target=request_status, daemon=True).start()
-        return jsonify({"status": "success" if ok else "error",
-                       "connected": ok, "port": arduino.port})
-    elif action in ['X_FWD', 'X_BACK', 'Y_FWD', 'Y_BACK', 'STOP']:
-        ok = arduino.send(f"MOTOR:{action}\n")
-        return jsonify({"status": "success" if ok else "error"})
+            start_status_loop()
+        return jsonify({"status": "success" if ok else "error", "connected": ok, "port": arduino.port})
+
+    if action in ['X_FWD', 'X_BACK', 'Y_FWD', 'Y_BACK', 'STOP']:
+        return jsonify({"status": "success" if arduino.send(f"MOTOR:{action}\n") else "error"})
+
     return jsonify({"status": "error"})
 
 @app.route('/detection_data')
@@ -397,7 +417,6 @@ def data():
 
 @app.route('/motor')
 def motor():
-    # Manual control ผ่าน Arduino
     d = request.args.get('dir')
 
     if d == 'xfwd':
@@ -423,43 +442,43 @@ def moveto():
 
 @app.route('/setmode')
 def setmode():
-    # เปลี่ยนโหมด
     m = request.args.get('mode')
-    system.mode = "auto_sequence" if m == 'auto_sequence' else "manual"
-    system.step = 0
 
-    # ส่งไป Arduino
     if m == 'auto_sequence':
+        system.mode = "auto_sequence"
         arduino.send("MODE:AUTO\n")
     else:
+        system.mode = "manual"
         arduino.send("MODE:MANUAL\n")
 
+    system.step = 0
     return "OK"
 
 @app.route('/set-alarm')
 def setalarm():
-    # ตั้งเวลา
     s = int(request.args.get('slot', 0))
     t = request.args.get('alarmTime', '')
-    if 0 <= s < 3:
+
+    if s >= 0 and s < 3:
         system.alarms[s] = {"isEnabled": True, "time": t}
-        # ส่งไป Arduino
-        arduino.send(f"ALARM:{s},{t}\n")
+        cmd = "ALARM:" + str(s) + "," + t + "\n"
+        arduino.send(cmd)
+
     return "OK"
 
 @app.route('/cancel-alarm')
 def cancelalarm():
-    # ยกเลิกเวลา
     s = int(request.args.get('slot', 0))
-    if 0 <= s < 3:
+
+    if s >= 0 and s < 3:
         system.alarms[s] = {"isEnabled": False, "time": ""}
-        # ส่งไป Arduino
-        arduino.send(f"CANCEL:{s}\n")
+        cmd = "CANCEL:" + str(s) + "\n"
+        arduino.send(cmd)
+
     return "OK"
 
 @app.route('/reset')
 def reset():
-    # รีเซ็ต encoder
     arduino.send("RESET\n")
     return "OK"
 

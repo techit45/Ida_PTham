@@ -1,3 +1,6 @@
+# Flask Controller พร้อม YOLOv8 Segmentation Model
+# สำหรับระบบตรวจสอบพืชและรดน้ำอัตโนมัติ
+
 from flask import Flask, render_template, jsonify, request, Response
 from datetime import datetime
 import cv2
@@ -7,9 +10,17 @@ import threading
 import time
 import serial.tools.list_ports
 
+# นำเข้า YOLO Model
+try:
+    from ultralytics import YOLO
+    YOLO_AVAILABLE = True
+except:
+    YOLO_AVAILABLE = False
+    print("ไม่พบ ultralytics - ใช้ HSV แทน")
+
 app = Flask(__name__)
 
-# === กล้อง ===
+# === กล้อง พร้อม Segmentation ===
 class Camera:
     def __init__(self):
         self.cam = None
@@ -21,6 +32,33 @@ class Camera:
         self.green_count = 0
         self.purple_count = 0
         self.plant_status = "ไม่พบพืช"
+
+        # ตั้งค่า Segmentation Model
+        self.use_segmentation = False
+        self.model = None
+        self.model_path = "runs/segment/plant_segmentation/weights/best.pt"
+
+    def load_segmentation_model(self, model_path=None):
+        # โหลด Segmentation Model
+        if not YOLO_AVAILABLE:
+            print("ไม่สามารถใช้ Segmentation ได้ - ใช้ HSV แทน")
+            return False
+
+        try:
+            if model_path:
+                self.model_path = model_path
+
+            print("กำลังโหลด Segmentation Model: " + self.model_path)
+            self.model = YOLO(self.model_path)
+            self.use_segmentation = True
+            print("โหลด Model สำเร็จ!")
+            return True
+
+        except Exception as e:
+            print("ไม่สามารถโหลด Model: " + str(e))
+            print("ใช้ HSV แทน")
+            self.use_segmentation = False
+            return False
 
     def start(self):
         try:
@@ -48,7 +86,77 @@ class Camera:
         if not ret:
             return None
 
-        # แปลงเป็นสี HSV
+        # เลือกวิธีการตรวจจับ
+        if self.use_segmentation and self.model:
+            # ใช้ Segmentation Model
+            frame = self.detect_with_segmentation(frame)
+        else:
+            # ใช้ HSV
+            frame = self.detect_with_hsv(frame)
+
+        return frame
+
+    def detect_with_segmentation(self, frame):
+        # ตรวจจับด้วย YOLO Segmentation Model
+        try:
+            # ทำนายผล
+            results = self.model.predict(frame, conf=0.5, verbose=False)
+
+            # รีเซ็ตค่า
+            self.yellow_count = 0
+            self.green_count = 0
+            self.purple_count = 0
+
+            # นับจำนวนแต่ละ Class
+            for box in results[0].boxes:
+                class_id = int(box.cls[0])
+                class_name = self.model.names[class_id]
+                confidence = float(box.conf[0])
+
+                # นับตาม Class
+                if "yellow" in class_name.lower():
+                    self.yellow_count = self.yellow_count + 1
+                elif "green" in class_name.lower():
+                    self.green_count = self.green_count + 1
+                elif "purple" in class_name.lower():
+                    self.purple_count = self.purple_count + 1
+
+            # อัพเดทสถานะ
+            if self.yellow_count > 0:
+                self.yellow = True
+            else:
+                self.yellow = False
+
+            if self.green_count > 0:
+                self.green = True
+            else:
+                self.green = False
+
+            if self.purple_count > 0:
+                self.purple = True
+            else:
+                self.purple = False
+
+            # วิเคราะห์สภาพพืช
+            self.analyze_plant_health()
+
+            # วาดผลลัพธ์บนภาพ
+            annotated = results[0].plot()
+
+            # เขียนข้อความสรุป
+            text1 = "Y:" + str(self.yellow_count) + " G:" + str(self.green_count) + " P:" + str(self.purple_count)
+            cv2.putText(annotated, text1, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            cv2.putText(annotated, self.plant_status, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(annotated, "Mode: SEGMENTATION", (10, frame.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+
+            return annotated
+
+        except Exception as e:
+            print("Segmentation error: " + str(e))
+            return frame
+
+    def detect_with_hsv(self, frame):
+        # ตรวจจับด้วย HSV (โค้ดเดิม)
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
         # หาสีเหลือง (เพิ่ม Saturation และ Value เพื่อไม่ให้เจอพื้นมืด)
@@ -115,7 +223,19 @@ class Camera:
         else:
             self.purple = False
 
-        # ดูสภาพพืช
+        # วิเคราะห์สภาพพืช
+        self.analyze_plant_health()
+
+        # เขียนข้อความบนภาพ
+        text1 = "Y:" + str(self.yellow_count) + " G:" + str(self.green_count) + " P:" + str(self.purple_count)
+        cv2.putText(frame, text1, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        cv2.putText(frame, self.plant_status, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        cv2.putText(frame, "Mode: HSV", (10, frame.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+
+        return frame
+
+    def analyze_plant_health(self):
+        # วิเคราะห์สภาพพืชจากสีที่พบ
         if self.yellow == True and self.green == False and self.purple == False:
             self.plant_status = "ขาดไนโตรเจน"
         elif self.purple == True and self.green == False and self.yellow == False:
@@ -128,13 +248,6 @@ class Camera:
             self.plant_status = "พืชปกติบางส่วน มีอาการขาดธาตุบางส่วน"
         else:
             self.plant_status = "ไม่พบพืช"
-
-        # เขียนข้อความบนภาพ
-        text1 = "Y:" + str(self.yellow_count) + " G:" + str(self.green_count) + " P:" + str(self.purple_count)
-        cv2.putText(frame, text1, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(frame, self.plant_status, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-
-        return frame
 
     def stop(self):
         self.running = False
@@ -284,12 +397,6 @@ class System:
         self.alarms.append({"isEnabled": False, "time": ""})
         self.alarms.append({"isEnabled": False, "time": ""})
         self.cam_on = False
-
-
-
-
-
-
         self.pump_duration = 5  # ระยะเวลาเปิดปั๊ม (วินาที)
 
 system = System()
@@ -351,6 +458,28 @@ def cam_ctrl():
         system.cam_on = False
         return jsonify({"status": "success"})
     return jsonify({"status": "error"})
+
+@app.route('/toggle_detection_mode')
+def toggle_detection():
+    # สลับระหว่าง HSV และ Segmentation
+    if camera.use_segmentation:
+        camera.use_segmentation = False
+        return jsonify({"status": "success", "mode": "HSV"})
+    else:
+        # ลองโหลด Model
+        if camera.load_segmentation_model():
+            return jsonify({"status": "success", "mode": "SEGMENTATION"})
+        else:
+            return jsonify({"status": "error", "message": "ไม่สามารถโหลด Model"})
+
+@app.route('/load_custom_model')
+def load_custom_model():
+    # โหลด Model จากตำแหน่งที่กำหนด
+    model_path = request.args.get('path', '')
+    if camera.load_segmentation_model(model_path):
+        return jsonify({"status": "success"})
+    else:
+        return jsonify({"status": "error"})
 
 def start_status_loop():
     def loop():
@@ -448,7 +577,8 @@ def detect_data():
         "plant_status": camera.plant_status,
         "camera_enabled": system.cam_on,
         "arduino_connected": arduino.connected,
-        "arduino_port": arduino.port
+        "arduino_port": arduino.port,
+        "detection_mode": "SEGMENTATION" if camera.use_segmentation else "HSV"
     })
 
 @app.route('/data')
@@ -570,8 +700,15 @@ def setpumpduration():
 # === เริ่มโปรแกรม ===
 if __name__ == '__main__':
     print("\n" + "="*40)
-    print("ESP32 Controller")
+    print("ESP32 Controller with Segmentation")
     print("="*40)
+
+    # ลองโหลด Segmentation Model
+    print("\nกำลังตรวจสอบ Segmentation Model...")
+    if camera.load_segmentation_model():
+        print("✓ ใช้ Segmentation Model")
+    else:
+        print("✓ ใช้ HSV Detection (Segmentation ไม่พร้อม)")
 
     camera.start()
     arduino.connect()

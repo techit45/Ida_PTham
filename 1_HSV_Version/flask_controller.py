@@ -284,12 +284,6 @@ class System:
         self.alarms.append({"isEnabled": False, "time": ""})
         self.alarms.append({"isEnabled": False, "time": ""})
         self.cam_on = False
-
-
-
-
-
-
         self.pump_duration = 5  # ระยะเวลาเปิดปั๊ม (วินาที)
 
 system = System()
